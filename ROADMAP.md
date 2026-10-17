@@ -1,7 +1,7 @@
 # Oriel — roadmap
 
-The order things get built. Each item becomes one or more specs (`/spec`) when its time
-comes. Nothing here is dropped; deferred items wait in **Later**.
+The order things get built. Each item becomes one or more specs (`/speckit-specify`)
+when its time comes. Nothing here is dropped; deferred items wait in **Later**.
 
 **The CLI is the primary product and is built first** (decided 2026-10-17). The desktop
 app comes after, as its own product: they share code, not data (`ARCHITECTURE.md`).

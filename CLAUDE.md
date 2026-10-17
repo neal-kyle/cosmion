@@ -19,6 +19,7 @@ before making decisions in its area:
 - `ROADMAP.md`: build order (milestones and phases) and every deferred item. When asked
   what's next, follow it.
 - `NOTES.md`: audience and direction, effort, license, landing page.
+- `.specify/memory/constitution.md`: principles and development workflow.
 - `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Oriel
   uses. Check it before speccing anything that talks to OpenRouter; items marked
   **(verify)** must be confirmed against the live API first.
@@ -38,13 +39,15 @@ how a future session should work here. Include the update in the same commit as 
 change that caused it. Triggers:
 
 - Commands are added or changed (build, test, lint, run, release).
-- The structure or a big-picture rule above changes.
+- The structure or a big-picture rule above changes (principles change in the
+  constitution, with the owner's approval).
 - A convention is established (naming, file layout, a pattern to reuse).
 - A non-obvious gotcha is discovered, e.g. something that broke and why.
 - The owner gives a lasting instruction about how to work.
 
 Keep it short and current: replace or remove outdated lines rather than appending, and
-don't duplicate what's in `ARCHITECTURE.md`, `DESIGN.md` or the code itself. Mention
+don't duplicate what's in the constitution, `ARCHITECTURE.md`, `DESIGN.md` or the code
+itself. Mention
 the update to the owner when it happens.
 
 ## The big picture
@@ -65,114 +68,34 @@ the update to the owner when it happens.
   tokens, and only the few custom surfaces listed in `DESIGN.md` → Components are
   built from scratch.
 
-## Working principles
+## Principles and workflow
 
-The owner is not a full-time developer and maintains this alone, with an AI agent. Every
-choice should keep the project understandable and maintainable by one person.
+**The rules for how code is written and features are built live in
+`.specify/memory/constitution.md`**: simplicity, proportionate SOLID, one-person
+maintainability, test-first, the stable agent interface and decoupled products. Read it
+before any feature work. It isn't repeated here.
 
-**Simplest thing that works.** Prefer the simplest solution that correctly handles the
-real cases, including edge cases that can actually happen. Add complexity only for a
-concrete, present reason, not a hypothetical future one. In practice:
+Features go through **Spec Kit** (lean preset), plus one project skill:
 
-- No abstraction until there are at least two real uses for it. Three similar lines beat
-  a premature helper.
-- No plugin systems, generic frameworks, config options or extension points nobody asked
-  for.
-- Add a dependency only when it clearly beats a few lines of our own code, and prefer
-  well-maintained, widely used libraries.
-- Handle errors at the boundaries where they can occur (network, filesystem, database,
-  user input). Don't wrap internal code in defensive checks for impossible states.
+| Command | Use for |
+|---------|---------|
+| `/speckit-specify` | Start a feature: creates a numbered branch and `specs/<NNN-name>/spec.md` |
+| `/speckit-clarify` | Resolve ambiguities in the spec before planning |
+| `/speckit-plan` | `plan.md`: how it's built |
+| `/speckit-tasks` | `tasks.md`: phased task checklist |
+| `/speckit-analyze` | Check spec, plan and tasks agree before implementing |
+| `/speckit-implement` | Build, one phase at a time (constitution IV and Development Workflow) |
+| `/speckit-converge` | Compare what was built with the spec and add remaining work |
+| `/speckit-checklist` | Optional: quality checklist for a spec |
+| `/design <topic>` | Explore visual or interaction design as HTML prototypes before it's specced |
 
-**SOLID, proportionately.** Apply the parts that pay off at this size:
+The owner approves the spec, the plan and the tasks before any code. Spec Kit's git
+extension has auto-commit turned off; commits still happen only when asked.
 
-- **Single responsibility**: yes. Each module does one job (e.g. pricing doesn't know
-  how the ledger is stored). Files stay small enough to read in one sitting.
-- **Dependency inversion at real seams only**: the OpenRouter client, the ledger / library,
-  and the settings/key store are passed in rather than imported directly where that
-  enables testing without network or real keys. Everything else just imports what it needs.
-- **Skip the ceremony**: no interface for every class, no class hierarchies, no
-  dependency-injection containers. Plain functions and modules are the default.
-
-**Maintainable by one person.**
-
-- Code reads plainly: clear names, obvious control flow, comments only where the *why*
-  isn't evident.
-- Follow the existing patterns in the codebase rather than introducing a second way of
-  doing the same thing.
-- When there's a real trade-off, explain it briefly in plain language and recommend one
-  option. Use your judgment; don't just ask.
-
-## How work flows
-
-Five project skills give the work structure. The rules below apply whether or not a
-skill was invoked; the skills hold the step-by-step.
-
-| Skill | Steps | Use for |
-|-------|-------|---------|
-| `/design <topic>` | explore 2–3 prototypes → iterate → settle into `DESIGN.md` | visual or interaction questions, before they're built |
-| `/spec <feature>` | draft → clarify → owner approves `spec.md` | every feature or meaningful behavior change |
-| `/plan <feature>` | phases of tasks → check against spec → owner approves `plan.md` | approved specs |
-| `/build <feature> [phase]` | one phase: tests first → code → converge spec, plan, docs and code | approved plans, one phase at a time |
-| `/analyze [feature]` | check docs, specs, plans and code agree → report → fix what the owner approves | anytime: before a new feature, after doc edits, when things feel out of sync |
-
-**Design just ahead of build.** Don't design everything up front. Settle the foundations
-(tokens for color, type, spacing, glass) early, since every component uses them; explore
-each screen or signature surface with `/design` shortly before its spec is built.
-Prototypes live in `design/` and share `design/tokens.css`, which later becomes the
-app's tokens.
-
-## How features get built: spec, then tests, then code
-
-Spec-driven and test-driven, kept lightweight. The point is fewer surprises, not
-paperwork.
-
-### 1. Spec first
-
-Every feature or meaningful behavior change gets a folder in `specs/` (e.g.
-`specs/pricing/`) with two files from `specs/_templates/`:
-
-- `spec.md`: what the feature does, its acceptance criteria, the edge cases that matter,
-  what's out of scope, and the owner's answers to clarifying questions.
-- `plan.md`: how it's built, as phases that each leave the project working, with a
-  checklist of tasks per phase. Written after the spec is approved.
-
-- Write the spec, clarify ambiguities with the owner, and get approval; then write the
-  plan and get approval. **No tests or code before both are approved.**
-- Build one phase at a time.
-- Keep it short: usually under a page. It describes behavior, not implementation.
-- `ARCHITECTURE.md` and `DESIGN.md` stay the big picture; specs are feature-level and
-  reference them rather than repeat them.
-- If building reveals the spec was wrong or incomplete, update the spec (and tell the
-  owner) rather than letting code and spec drift apart. The spec always matches what
-  shipped.
-- **No spec needed** for bug fixes that restore specced behavior, refactors that don't
-  change behavior, dependency updates, or docs. A bug fix still gets a test that
-  reproduces the bug first.
-
-### 2. Tests before code
-
-For each acceptance criterion: write a failing test, make it pass with the simplest code,
-then tidy up. Run the tests and show they fail before implementing, and pass after.
-
-Where TDD applies, proportionately:
-
-- **Strictly:** `packages/core` (pricing, model catalog), the CLI's ledger and its
-  behavior (commands, `--json` output, exit codes), and later budget caps. This is where
-  bugs cost money or break agents.
-- **Behavior only:** UI components and app logic. Test what a component *does* (keyboard
-  handling, states, what it calls), not how it looks.
-- **Not TDD:** visual design. That's judged in prototypes, Storybook and the CI
-  screenshots described in `ARCHITECTURE.md`.
-
-Testing rules:
-
-- Never call the real OpenRouter API or touch the user's real settings in tests; use the
-  injected fakes (see Dependency inversion above). Use a temporary data and config folder
-  per test.
-- Test through public functions and CLI output, not internal details, so refactoring
-  doesn't break tests.
-- Never weaken or delete a test to make it pass. If a test is wrong, say so and fix it
-  deliberately.
+**Design just ahead of build.** Settle the design foundations (tokens for color, type,
+spacing, glass) early, then explore each screen with `/design` shortly before it's
+specced. Prototypes live in `design/` and share `design/tokens.css`, which later becomes
+the app's tokens.
 
 ## Git
 
