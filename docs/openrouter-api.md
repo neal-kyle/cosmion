@@ -1,8 +1,8 @@
 # OpenRouter API reference (for Oriel)
 
 The parts of OpenRouter's API that Oriel uses. Gathered from openrouter.ai's docs on
-2026-10-17. Items marked **(verify)** were unclear in the docs and must be checked
-against the live API before the spec that depends on them is approved.
+2026-10-17 and checked against the live API the same day. Items marked **(verify)** are
+unclear and must be checked live before a spec depends on them; none are open.
 
 All endpoints are under `https://openrouter.ai/api/v1` and take
 `Authorization: Bearer <key>`. Field names below are as sent over HTTP (snake_case).
@@ -31,7 +31,7 @@ this, not the chat completions endpoint with `modalities: ["image"]`.
 | `input_references` | array, max 16 | reference images for image-to-image: `{ "type": "image_url", "image_url": { "url": "<https URL or base64 data URL>" } }` |
 | `size` | string | shorthand for dimensions or tier; prefer `aspect_ratio` + `resolution` |
 | `stream` | boolean | partial images as SSE events; only providers with native streaming (currently OpenAI), others ignore it |
-| `session_id` | string, max 256 | groups related requests: maps naturally to an Oriel thread id |
+| `session_id` | string, max 256 | groups related requests (not used by the CLI) |
 | `provider` | object | routing preferences; provider-specific options under `provider.options[provider_slug]` |
 | `user` | string | stable end-user id for abuse prevention |
 
@@ -40,27 +40,44 @@ Not every model supports every field. What a model accepts comes from model disc
 
 **Response (200)**
 
+As seen live (2026-10-17), abridged:
+
 ```json
 {
-  "created": 1748372400,
-  "data": [{ "b64_json": "<base64 image>" }],
-  "usage": { "prompt_tokens": 0, "completion_tokens": 4175, "total_tokens": 4175, "cost": 0.04 }
+  "created": 0,
+  "data": [{ "b64_json": "<base64 image>", "media_type": "image/jpeg" }],
+  "usage": {
+    "prompt_tokens": 17, "completion_tokens": 16384, "total_tokens": 16401,
+    "cost": 0.04, "is_byok": false,
+    "cost_details": { "upstream_inference_cost": 0.04, "...": "..." },
+    "completion_tokens_details": { "reasoning_tokens": 0, "image_tokens": 16384 }
+  }
 }
 ```
 
-- Images come back as **base64** in `data[].b64_json`. Oriel decodes them and writes the
-  file: the CLI where asked, the app into its library. **(verify)** whether any providers return a URL instead, and any other
-  fields per item.
+Response headers: `x-generation-id: gen-img-…` and `x-provider-name: Seed`.
+
+- Images come back as **base64** in `data[].b64_json`, with the format in `media_type`
+  (`image/png`, `image/jpeg`, `image/webp`, `image/svg+xml`). Six models across five
+  providers (Seed, Black Forest Labs, Google, Recraft, Sourceful) all did this; none
+  returned a URL. Oriel decodes them and writes the file where asked.
 - `usage.cost` is the **actual cost in USD**, so it can be recorded in the ledger directly
   without a second request.
-- **(verify)** whether the response includes a generation `id` (needed only for the
-  generation stats endpoint below).
+- The generation id and the provider that served it are in the **response headers**, not
+  the body. `created` was `0`.
+- Every image response has token counts, even for per-image models (whose counts mean
+  nothing for price).
+- With no options, models use their own default size: Seedream 4.5 gave 2048×2048, Gemini
+  2.5 Flash Image 1024×1024.
+- A model can return a format its `output_format` enum doesn't list: Riverflow v2.5 Fast
+  lists only `jpeg` but returned WebP.
 
 ## Model discovery
 
 ### `GET /images/models`
 
-Lists every image model. No auth required in the docs' examples.
+Lists every image model. No auth required (checked live 2026-10-17, as are the
+`endpoints` records).
 
 Per model: `id`, `name`, `description`, `created`,
 `architecture.input_modalities` (e.g. `["text","image"]`; `image` means it accepts
@@ -88,8 +105,8 @@ The definitive capabilities and **pricing**, per provider serving the model:
 | `range` | `{ "type": "range", "min": 0, "max": 100 }` | any integer in range |
 | `boolean` | `{ "type": "boolean" }` | supported |
 
-**An absent key means unsupported.** This is exactly what the prompt box needs: show a
-control only when its key is present, and offer only the listed values.
+**An absent key means unsupported.** So the CLI accepts an option only when its key is
+present, and only the listed values.
 
 ## Cost
 
@@ -99,34 +116,69 @@ control only when its key is present, and offer only the listed values.
 
 | Output pricing | Models | Examples | Price known before generating? |
 |----------------|--------|----------|--------------------------------|
-| Per image (`unit: image`), sometimes tiered by `variant` | ~32 | Recraft, Seedream, Qwen, Flux 3, Riverflow, Grok Imagine | **Exact**: pick the line matching the chosen resolution/quality |
-| Per megapixel | 4 | Flux.2 (pro, max, flex, klein) | **Exact**, computed from the output dimensions (resolution × aspect ratio) |
+| Per image (`unit: image`), sometimes tiered by `variant` | ~32 | Recraft, Seedream, Qwen, Flux 3, Riverflow, Grok Imagine | **Exact** for most: pick the line matching the chosen resolution/quality. But the catalog can be wrong (Riverflow, below) |
+| Per megapixel | 4 | Flux.2 (pro, max, flex, klein) | **Not exactly**: Flux.2 has no `resolution` option, so the output size isn't known before generating, and billing isn't linear in megapixels (below) |
 | Per token | ~20 | All Google Gemini, OpenAI and Microsoft image models, Tencent | **Not exactly**: the API gives the price per token but not how many tokens an image uses |
 | No pricing listed | 5 | Krea models, Meta Muse | No |
 
 Only 4 models have more than one provider, and only 2 of those differ in price (a few
 Gemini models, by about 10%).
 
-Variant names aren't standardized (`1k`, `2k`, `high_resolution`, `low_1k`,
-`medium_2k`), so matching a variant to the chosen settings needs a small mapping.
-**(verify)** how the provider applies the line without a variant when variant lines also
-exist (e.g. Seedream 5 Pro).
+Variant names aren't standardized (`768`, `1k`, `1.5k`, `2k`, `4k`, `high_resolution`,
+`low_1k`, `low_2k`, `medium_1k`, `medium_2k`), so matching a variant to the chosen
+settings needs a small mapping.
+
+Also seen in the live catalog (2026-10-17):
+
+- `input_references` is a `range` descriptor giving how many references a model takes
+  (e.g. `{ "type": "range", "min": 0, "max": 14 }`).
+- `unit: request` exists: Recraft "styles" models charge `input_reference` once per
+  request, not per image.
+- One provider can list two endpoints at different prices (Gemini 3 Pro Image Preview:
+  `google-ai-studio/global` and `google-ai-studio/global/flex`, the second at half
+  price), so "several prices" isn't only "several providers".
+
+### Charged vs listed (live generations, 2026-10-17)
+
+| Model | Settings | Listed | Charged | Reading |
+|-------|----------|--------|---------|---------|
+| Seedream 4.5 | defaults (2048×2048) | $0.04 | $0.04 | Single line: exact |
+| Seedream 5 Pro | 1K | $0.045 (no variant), $0.09 (`high_resolution`) | $0.045 | The variant-less line is the base tier |
+| Seedream 5 Pro | 2K | same | $0.09 | `high_resolution` = above the lowest resolution |
+| Recraft v4.1 Vector | 1:1, SVG | $0.08 | $0.08 | Exact |
+| Flux.2 Klein 4B | 1:1 (1024×1024) | $0.014 / megapixel | $0.014 | |
+| Flux.2 Klein 4B | 16:9 (1824×1024, 1.87 MP) | $0.014 / megapixel | $0.015 | **Not linear**: probably a first-megapixel price plus a cheaper rate after, which the catalog's single line doesn't show |
+| Gemini 2.5 Flash Image | 1:1, run twice | $0.00003 / token | $0.03872 and $0.03870 (1295 and 1290 image tokens) | Token counts stable within 0.5% |
+| Riverflow v2.5 Fast | 1K | $0.019 (no variant), $0.021 (`2k`) | $0.031378 | **Catalog wrong** |
+| Riverflow v2.5 Fast | 2K | same | $0.031597 | **Catalog wrong** |
+
+So: the variant-less line is the base price when variant lines also exist, and token
+counts are stable for a given size. Per-megapixel lines aren't enough to price Flux.2, and
+at least one provider charges something other than its listed price. The ledger records
+the actual cost, which corrects both (below).
 
 ### How Oriel shows price
 
-- **Per-image and per-megapixel models:** the exact price before generating.
+- **Per-image models:** the exact price before generating. With variant lines, the line
+  matching the chosen resolution (or `<quality>_<resolution>`) applies; a line without a
+  variant is the base tier, and `high_resolution` means above the lowest resolution. If
+  the last generation with
+  the same model and settings was charged a different amount (as Riverflow is), show that
+  actual cost instead, as an estimate, with both figures.
+- **Per-megapixel models:** the actual cost of the last generation with the same model and
+  settings, as an estimate. Before the first one, "price shown after the first image".
 - **Several providers at different prices:** show the highest, so the shown price is a
   ceiling ("at most"); the actual is recorded after.
-- **Per-token models:** the image itself uses a fixed number of tokens per size and
-  quality **(verify per provider)**. Each product's history (the CLI's ledger, the app's
-  library) stores each generation's **token counts** (`usage.prompt_tokens`,
+- **Per-token models:** the image itself uses a near-fixed number of tokens per size and
+  quality (Gemini 2.5 Flash Image: within 0.5%, checked live 2026-10-17). The ledger
+  stores each generation's **token counts** (`usage.prompt_tokens`,
   `usage.completion_tokens`), not just its cost. The price shown = tokens from the last
   generation with the same model and settings × the **current** per-token price from the
   catalog. So a per-token price change is picked up
   automatically. Before the first generation with those settings, it says the price will
   be shown after the first image.
   - The prompt's own tokens vary with its length, but cost a tiny fraction of a cent, so
-    the displayed price (rounded to the cent) doesn't move.
+    they barely move the shown price.
   - If a provider changes how many tokens an image uses, the shown price is off once,
     then corrects itself from the new generation.
 - **No per-model code.** Pricing is computed from each line's `unit`, never from the
@@ -136,36 +188,42 @@ exist (e.g. Seedream 5 Pro).
   - **Unknown `variant` name** (can't be matched to the chosen settings): show the
     highest output line as a ceiling ("≤").
 - **Keeping prices current:** the model catalog and its pricing are refreshed at least
-  daily (the CLI caches it for up to 24 hours; the app refreshes on launch and daily), so
-  shown prices reflect current rates.
+  daily (the CLI caches it for up to 24 hours), so shown prices reflect current rates.
 - **No pricing listed:** "Price not listed"; actual recorded after.
 - **Reference images** add their own lines (`input_image`, `input_reference`); include
   them when present.
 - **After generating:** `usage.cost` in the response is the actual amount charged, and is
-  what the CLI's ledger and the app's library store.
+  what the ledger stores.
 
 ## Account
 
 ### `GET /key`: the current key
 
 Returns `limit` (spending limit or `null`), `limit_remaining`, `limit_reset`, `usage`,
-`usage_daily` / `_weekly` / `_monthly`, `is_free_tier`, `label`, `expires_at`.
+`usage_daily` / `_weekly` / `_monthly`, `is_free_tier`, `label`, `expires_at`. Live
+(2026-10-17) it also returns `is_management_key`, `budgets`, `effective_budget`, BYOK
+usage fields and more; `label` defaults to a masked form of the key
+(e.g. `sk-or-v1-abc...xyz`).
 
 Useful for: checking a key works (`oriel auth`), and showing remaining budget when the key
 has a limit.
 
 ### `GET /credits`: account balance
 
-Returns `total_credits` and `total_usage` (balance = credits − usage). **(verify)** The
-docs list a 403 "Only management keys can perform this operation" for this endpoint. If
-ordinary or OAuth-issued keys can't call it, show the key's `limit_remaining` instead,
-or no balance.
+Returns `total_credits` and `total_usage` (balance = credits − usage). The docs list a
+403 "Only management keys can perform this operation", but an ordinary key gets 200
+(checked live 2026-10-17). Still unchecked for OAuth-issued keys (relevant once `oriel auth login` exists).
+
+**A low balance blocks generating before it runs out.** Live, 2026-10-17: with a balance
+of $0.52, `POST /images` returned 402 even for a $0.007 image, and nothing was charged.
+OpenRouter evidently requires (or holds) more than the image's price; the threshold
+isn't documented.
 
 ### `GET /generation?id=…`: stats for a past generation
 
-Cost, `generation_time`, `latency`, `provider_name`, token counts. Probably unnecessary
-since `usage.cost` arrives in the response; possibly useful for provider and timing in
-the image details panel, if the images response includes an `id`.
+Cost, `generation_time`, `latency`, `provider_name`, token counts. Not needed by the CLI:
+`usage.cost` arrives in the response. The id comes in the `x-generation-id` response
+header if timing details are ever wanted.
 
 ## Sign in: OAuth PKCE
 
@@ -177,30 +235,30 @@ the image details panel, if the images response includes an `id`.
    → `{ "key": "sk-or-v1-…", "user_id": "…" }`. Store the key.
 
 **Localhost callbacks work on any port** (e.g. `http://localhost:51423/callback`), made
-for CLI and local apps: the app and CLI can start a temporary local server on a free
-port. Such apps get the fixed title `localhost:<port>` on OpenRouter and don't appear in
-its rankings; a public callback URL is needed for that (not a concern for v0.1).
+for CLI and local apps: `oriel auth login` (later) can start a temporary local server on
+a free port. Such apps get the fixed title `localhost:<port>` on OpenRouter and don't
+appear in its rankings; a public callback URL is needed for that.
 
-## App attribution (optional headers)
+## Attribution (optional headers)
 
-- `HTTP-Referer`: app URL (e.g. the landing page or repo).
+- `HTTP-Referer`: the project's URL (the landing page or repo).
 - `X-OpenRouter-Title` (or `X-Title`): `Oriel`.
 
-Shows the app on openrouter.ai. Send from both the app and the CLI once there's a URL.
+Shows Oriel on openrouter.ai. The CLI sends the title now and the URL once there is one.
 
 ## Errors
 
 Shape: `{ "error": { "code": <int>, "message": "<text>" } }`.
 
-| Code | Meaning | Oriel's handling (to spec) |
+| Code | Meaning | CLI handling (`specs/001-cli` FR-040) |
 |------|---------|----------------------------|
-| 400 | Invalid parameters | Show message; likely a bug or unsupported option |
-| 401 | Missing/invalid key | Prompt to sign in again; CLI exit code for auth failure |
-| 402 | Insufficient credits | Link to openrouter.ai/credits |
-| 404 | Unknown model/resource | Model removed: refresh catalog |
-| 429 | Rate limited | Wait and retry, or tell the user |
-| 500, 502, 529 | Server or provider error | Retryable; tell the user |
-| 524 | Timed out | Retryable |
+| 400 | Invalid parameters | Exit 2 with OpenRouter's message; likely a bug or unsupported option |
+| 401 | Missing/invalid key | Exit 3 |
+| 402 | Insufficient credits or key limit | Exit 4, saying which (`error.metadata.limit_source`, e.g. `"openrouter_credits"`, seen live 2026-10-17, with a `remedy_hint`) and linking to openrouter.ai/settings/credits |
+| 404 | Unknown model/resource | Refresh the catalog; exit 5 |
+| 429 | Rate limited | Exit 6, retryable; no automatic retry |
+| 500, 502, 529 | Server or provider error | Exit 7, retryable |
+| 524 | Timed out | Exit 7, retryable |
 
 ## Not used
 

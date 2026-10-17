@@ -1,0 +1,723 @@
+# Feature Specification: Oriel CLI
+
+**Feature Branch**: `001-cli`
+
+**Created**: 2026-10-17
+
+**Status**: Draft
+
+**Input**: User description: "look at the docs (including the openrouter one) and create a spec
+to build the CLI. Follow the principles laid out in CLAUDE.md when creating it."
+
+## Overview
+
+`oriel`: a command-line tool that generates images with any
+image model on OpenRouter using the user's own key, saves them where asked, tells the user
+what a generation will cost before spending, and keeps a private local record of what was
+made and what it cost. It is built for developers and the agents they run, so every
+command has a stable machine-readable interface.
+
+This spec covers two phases, each shipped as releases:
+
+| Phase | Release | Commands |
+|-------|---------|----------|
+| 1A | v0.1 | `gen`, `models`, `price`, `history`, `show`, `auth` (Stories 1–6) |
+| 1B | v0.2 onward, one minor release per command or two | `batch`, `usage`, `regen`, `models rank`, `doctor`, `schema` (Stories 7–12) |
+
+Ideas for later (OAuth sign-in, OS keychain, extra distribution channels, a TUI;
+`docs/ideas/`) are not part of this spec. How it's built (`src/core` and `src/cli`, JSON Lines ledger, folders,
+libraries) belongs to the plan and isn't repeated here. API details are in
+`docs/openrouter-api.md`.
+
+## Clarifications
+
+### Session 2026-10-17
+
+- Q: Should the spec cover only Milestones 1A + 1B, or also the CLI items in the roadmap's Later list? → A: 1A + 1B; Later items stay out.
+- Q: Given that the key's spending limit (set on OpenRouter) is the real hard stop, what should `batch --budget` be? → A: A required per-run guard: rows start only while the budget has room; unknown-priced rows run one at a time and the first one's actual cost prices the rest; it can go over by at most one image.
+- Q: Should `oriel gen` require `--model` every time, or allow a default model? → A: `--model`, otherwise the `ORIEL_MODEL` env var; neither → exit 2.
+- Q: Which license should Oriel be released under? → A: MIT.
+- Q: Can the five open API questions be settled now with a few real generations? → A: Yes. Done on 2026-10-17 after topping up the account ($0.33 spent; see "Live API checks" below). Earlier attempts at a $0.52 balance were refused even for a $0.007 image (FR-040a), and showed that `GET /credits` works with an ordinary key (FR-048).
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Generate an image into my project (Priority: P1)
+
+A developer (or their agent) with an OpenRouter key runs one command with a prompt and a
+model, and gets an image file saved in the current folder or exactly where they said,
+along with what it actually cost.
+
+**Why this priority**: It's the product. Everything else supports it.
+
+**Independent Test**: With `OPENROUTER_API_KEY` set and a fake OpenRouter, run
+`oriel gen "a lighthouse" --model <id>` and check the file, the printed path and cost,
+and the new ledger line.
+
+**Acceptance Scenarios**:
+
+1. **Given** a valid key, **When** I run `oriel gen "a lighthouse at dusk" -m bytedance-seed/seedream-4.5`,
+   **Then** an image is saved as `./oriel-<id>.jpg` (Seedream returns JPEG), its path is
+   printed, and a summary with id, model and actual cost is shown.
+2. **Given** a valid key, **When** I run `oriel gen "hero" -m <id> --out assets/hero.png`,
+   **Then** the image is saved at exactly `assets/hero.png`, creating `assets/` if missing.
+3. **Given** `--count 3 --out shots/`, **When** the model returns 3 images, **Then** they
+   are saved as `shots/oriel-<id>-1.<ext>` … `-3.<ext>` and all three appear in one
+   ledger entry.
+4. **Given** a model that accepts reference images, **When** I pass `--ref sketch.png`,
+   **Then** the image is sent as a reference and the ledger records the reference's path.
+5. **Given** a model whose capabilities don't include `quality`, **When** I pass
+   `--quality high`, **Then** nothing is sent to OpenRouter, the CLI exits 2 and names the
+   flag and the model.
+6. **Given** `--out logo.png` already exists, **When** I run `gen` without `--force`,
+   **Then** nothing is sent and the CLI exits 2; with `--force` the file is replaced.
+7. **Given** the account's balance is too low, **When** I run `gen`, **Then** the CLI exits
+   4 and points to `https://openrouter.ai/settings/credits`.
+
+---
+
+### User Story 2 - An agent drives Oriel reliably (Priority: P1)
+
+An AI agent uses `oriel` as a tool: it reads structured output, branches on exit codes,
+learns the tool from `--help` and `SKILL.md`, and is never left hanging on a prompt.
+
+**Why this priority**: Agents are a primary audience; breaking this contract later is a
+breaking change (constitution V), so it must be right from the first release.
+
+**Independent Test**: Run every command with `--json`, stdin not a TTY, against a fake
+OpenRouter; parse stdout as JSON and check exit codes for each success and failure case.
+
+**Acceptance Scenarios**:
+
+1. **Given** any command with `--json`, **When** it succeeds, **Then** stdout is exactly
+   one JSON object and nothing else; progress and warnings go to stderr.
+2. **Given** any command with `--json`, **When** it fails, **Then** stdout is one JSON
+   error object and the exit code matches the table in FR-040.
+3. **Given** stdin is not a TTY, **When** a command would need interactive input,
+   **Then** it exits 2 immediately with a message saying what to pass instead.
+4. **Given** a rate-limit or server error, **When** reported, **Then** the error says
+   `"retryable": true` so the agent knows it can try again.
+
+---
+
+### User Story 3 - Set up my key (Priority: P2)
+
+A developer saves their OpenRouter key once, has it checked, and can see later which key
+is in use and how much of its limit remains, without the key ever being printed.
+
+**Why this priority**: Humans need it to start; agents can use the env var instead, so
+`gen` is usable without it.
+
+**Independent Test**: Run `oriel auth` with a key on stdin (`--stdin`) against a fake
+`/key` endpoint; check the settings file's contents and permissions, then `auth status`.
+
+**Acceptance Scenarios**:
+
+1. **Given** a terminal, **When** I run `oriel auth` and paste a valid key, **Then** input
+   is hidden, the key is checked with OpenRouter, saved to a file only I can read, and the
+   key's label is shown.
+2. **Given** an invalid key, **When** I run `oriel auth`, **Then** nothing is saved and
+   the CLI exits 3.
+3. **Given** both `OPENROUTER_API_KEY` and a saved key, **When** I run `oriel auth status`,
+   **Then** it reports the env var as the source in use.
+4. **Given** a saved key, **When** I run `oriel auth logout`, **Then** the saved key is
+   removed.
+
+---
+
+### User Story 4 - Choose a model and know the price first (Priority: P2)
+
+A developer lists image models with their capabilities and prices, and asks what a
+specific generation will cost before spending anything.
+
+**Why this priority**: Exact prices before spending are a core promise of Oriel, but
+generating works without them.
+
+**Independent Test**: With a fake catalog covering each pricing kind, run `oriel models`,
+`oriel models <id>` and `oriel price` and compare against expected prices.
+
+**Acceptance Scenarios**:
+
+1. **Given** a per-image model, **When** I run `oriel price -m bytedance-seed/seedream-4.5`,
+   **Then** it shows the exact price, `kind: "exact"`.
+2. **Given** a model with tiered lines (`1k`, `2k`), **When** I run `price --resolution 2K`,
+   **Then** it uses the `2k` line exactly.
+3. **Given** a model served by two providers at different prices, **When** I run `price`,
+   **Then** it shows the higher price as `kind: "at_most"`.
+4. **Given** a per-token model I've used before with the same settings, **When** I run
+   `price`, **Then** it shows an estimate from my last matching generation's token counts
+   × the current per-token price, `kind: "estimate"`.
+5. **Given** a per-token or per-megapixel model I haven't used with these settings,
+   **When** I run `price`, **Then** it says the price will be known after the first image,
+   `kind: "unknown"`.
+6. **Given** a model with a line without a variant ($0.045) and a `high_resolution` line
+   ($0.09), **When** I run `price --resolution 1K`, **Then** it shows $0.045 exactly; with
+   `--resolution 2K`, $0.09 exactly.
+7. **Given** a per-image model listed at $0.019 whose last matching generation was charged
+   $0.031, **When** I run `price`, **Then** it shows ~$0.031, `kind: "estimate"`, with a
+   note giving both figures.
+8. **Given** a per-megapixel model I've used with the same settings, **When** I run
+   `price`, **Then** it shows that generation's actual cost, `kind: "estimate"`.
+9. **Given** the catalog cache is older than 24 hours, **When** I run any command needing
+   it, **Then** it is refreshed first.
+
+---
+
+### User Story 5 - See what I made and what it cost (Priority: P3)
+
+A developer lists recent generations and opens one in full detail, including whether the
+image is still where it was saved.
+
+**Why this priority**: Valuable record-keeping, and the ledger it reads is already written
+by Story 1.
+
+**Independent Test**: Seed a ledger file; run `oriel history` and `oriel show <id>`.
+
+**Acceptance Scenarios**:
+
+1. **Given** a ledger with 50 entries, **When** I run `oriel history`, **Then** the 20
+   newest are shown, newest first, with id, time, model, cost, prompt (shortened) and path.
+2. **Given** an entry whose image was moved, **When** I run `oriel show <id>`, **Then** the
+   full entry is shown and the image is marked as no longer at its saved path.
+3. **Given** an unknown id, **When** I run `oriel show <id>`, **Then** the CLI exits 5.
+
+---
+
+### User Story 6 - Install from npm (Priority: P3)
+
+A developer installs with `npm install -g oriel` on Node 22+ and it works on macOS,
+Windows and Linux with no build step (CI runs the tests on all three).
+
+**Why this priority**: Required to ship, but has no behavior of its own.
+
+**Independent Test**: The CI packaging check (FR-063).
+
+**Acceptance Scenarios**:
+
+1. **Given** Node 22+, **When** I install the packed tarball into an empty folder,
+   **Then** `oriel --version` and `oriel --help` work.
+2. **Given** Node older than 22, **When** I install, **Then** npm reports the engine
+   requirement.
+
+---
+
+### User Story 7 - Generate many images within a budget (Priority: P2, phase 1B)
+
+A developer or agent hands Oriel a CSV or JSONL file of prompts and a dollar budget for
+that run; Oriel stops starting rows once the budget is used, and can pick up where it left
+off after a failure. The key's own spending limit on OpenRouter stays the hard stop; the
+budget limits one run without touching it.
+
+**Why this priority**: The biggest 1B feature, and the one where a bug costs real money.
+
+**Independent Test**: Run `oriel batch jobs.csv --budget 0.20` against a fake with known
+prices; check files, ledger entries, the report and that spending stops at the cap.
+
+**Acceptance Scenarios**:
+
+1. **Given** a CSV with 5 rows at $0.04 each and `--budget 0.20`, **When** I run `batch`,
+   **Then** all 5 are generated and the report shows $0.20 spent.
+2. **Given** the same file and `--budget 0.10`, **When** I run `batch`, **Then** 2 rows
+   are generated, 3 are reported `skipped_budget`, and the CLI exits 8.
+3. **Given** row 4 has an option its model doesn't support, **When** I run `batch`,
+   **Then** nothing is generated and the CLI exits 2 naming row 4.
+4. **Given** `--dry-run`, **When** I run `batch`, **Then** the rows are validated and the
+   total price is shown, and nothing is spent.
+5. **Given** a batch where row 3 failed with a server error, **When** I run it again with
+   `--resume <batch-id>`, **Then** only rows without a successful entry are generated, and
+   the budget counts what the batch already spent.
+6. **Given** 4 rows of a per-token model never used with those settings, **When** I run
+   `batch`, **Then** the first row runs alone, its actual cost becomes the price of the
+   other 3, and they're then budgeted like any other row.
+
+---
+
+### User Story 8 - See what I've spent (Priority: P3, phase 1B)
+
+A developer sees their total spending over a period, broken down by model or by day.
+
+**Why this priority**: Useful, and it only reads the ledger.
+
+**Independent Test**: Seed a ledger with known costs and dates; run `oriel usage`.
+
+**Acceptance Scenarios**:
+
+1. **Given** a ledger, **When** I run `oriel usage`, **Then** it shows the total cost,
+   generations and images for the last 30 days, grouped by model.
+2. **Given** `--since 2026-10-01 --by day`, **When** I run `usage`, **Then** it shows one
+   row per day from that date.
+3. **Given** entries with unknown cost, **When** I run `usage`, **Then** they are counted
+   separately and not treated as $0.
+
+---
+
+### User Story 9 - Re-run a past generation exactly (Priority: P3, phase 1B)
+
+A developer re-runs a past generation with the same model, prompt, settings, seed and
+references, to get another copy or recover a deleted file.
+
+**Why this priority**: Convenience built on the ledger.
+
+**Independent Test**: Seed a ledger entry; run `oriel regen <id>` against a fake and check
+the request matches the original exactly.
+
+**Acceptance Scenarios**:
+
+1. **Given** a past entry, **When** I run `oriel regen <id>`, **Then** OpenRouter receives
+   the same model, prompt, settings, seed and references, and a new entry records
+   `regen_of: <id>`.
+2. **Given** a past entry whose local reference file no longer exists, **When** I run
+   `regen`, **Then** nothing is sent and the CLI exits 2 naming the missing file.
+
+---
+
+### User Story 10 - Find the right model for a job (Priority: P3, phase 1B)
+
+A developer asks which models can do what they need (e.g. 4K, transparent background, two
+references) and sees them ranked cheapest first.
+
+**Why this priority**: Helps choosing among 60+ models, but `models` and `price` already
+answer it by hand.
+
+**Independent Test**: With a fake catalog, run `oriel models rank` with capability options
+and check filtering and order.
+
+**Acceptance Scenarios**:
+
+1. **Given** `oriel models rank --resolution 4K`, **When** run, **Then** only models that
+   offer 4K are listed, cheapest first for 4K, unknown prices last.
+2. **Given** `--refs 2 --background transparent`, **When** run, **Then** only models that
+   accept 2+ references and a transparent background are listed.
+
+---
+
+### User Story 11 - Check that everything works (Priority: P3, phase 1B)
+
+A developer or agent runs one command that checks the setup and says what's wrong and how
+to fix it.
+
+**Why this priority**: Saves support time; nothing depends on it.
+
+**Independent Test**: Break each checked thing in a temporary setup (no key, bad key,
+wrong file permissions, cut-off ledger line) and run `oriel doctor --json`.
+
+**Acceptance Scenarios**:
+
+1. **Given** a healthy setup, **When** I run `oriel doctor`, **Then** every check passes
+   and it exits 0.
+2. **Given** a settings file readable by others, **When** I run `doctor`, **Then** that
+   check fails with the fix, and the CLI exits 8.
+
+---
+
+### User Story 12 - An agent discovers the whole interface (Priority: P2, phase 1B)
+
+An agent asks the CLI for a machine-readable description of every command, option, output
+shape and exit code, instead of parsing `--help`.
+
+**Why this priority**: Makes Oriel easy to wire into any agent harness.
+
+**Independent Test**: Run `oriel schema`; validate each command's real `--json` output in
+the test suite against the shape it declares.
+
+**Acceptance Scenarios**:
+
+1. **Given** any release, **When** I run `oriel schema`, **Then** it prints every command
+   with its options, output JSON Schema and the exit code table.
+2. **Given** the test suite, **When** every command's `--json` output is checked against
+   its declared schema, **Then** all match.
+
+---
+
+### Edge Cases
+
+- **Paid but not saved:** if the image can't be decoded or written after OpenRouter has
+  charged for it, the ledger entry is still written with the cost and no saved images, and
+  the CLI exits 1 explaining what happened. All path checks happen *before* the request
+  (FR-012) so this only happens on failures like a full disk.
+- **Fewer images than requested:** `n` is an upper bound; the CLI saves what comes back
+  and the JSON shows how many.
+- **Generation times out or is interrupted (Ctrl-C):** no ledger entry; the message says
+  the provider may still have charged and to check openrouter.ai activity.
+- **Cut-off last ledger line** (crash mid-write): skipped when reading, with a warning on
+  stderr; other entries are unaffected.
+- **Ledger entry from a newer CLI** (unknown format version): skipped with a warning.
+- **Ledger can't be written** after a successful save: the image stays, a warning goes to
+  stderr, exit 0 (the image, the main result, exists).
+- **Several `oriel gen` processes at once:** every entry lands as a complete line.
+- **Model not in the cached catalog:** refresh once, then exit 5 if still unknown.
+- **Catalog refresh fails** (offline) **with a cache present:** use the stale cache and warn.
+  With no cache: exit 7.
+- **Returned format differs from the `--out` extension** (the model has no
+  `output_format` control, or ignores it: Riverflow lists only `jpeg` and returns WebP):
+  write to the exact path anyway, warn on stderr, report the real format.
+- **SVG output** (Recraft vector models): saved as `.svg`; width and height are `null`.
+- **Missing `usage.cost`** in the response: cost recorded as `null`, warning on stderr.
+- **Key set via env var while running `oriel auth`:** the key is saved, with a warning that
+  the env var takes precedence.
+- **Batch interrupted** (Ctrl-C, crash): finished rows are already in the ledger;
+  `--resume <batch-id>` continues.
+- **Batch hits a credits or auth error:** no further rows start; running rows finish; the
+  report marks the rest `not_run` and the CLI exits 4 or 3.
+- **Batch row fails with a retryable error:** that row is marked `failed`; the batch goes on.
+- **`regen` of an entry whose model was removed:** exits 5.
+- **`regen` of an entry without a seed** (its model has no `seed` option): re-runs with
+  the same settings; the output notes the result won't be identical.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+**Generating: `oriel gen <prompt> [--model <id>] [options]`**
+
+- **FR-001**: `gen` MUST take the prompt as its argument, or read it from stdin when the
+  argument is `-`. An empty prompt exits 2.
+- **FR-002**: The model MUST come from `--model`/`-m <id>`, otherwise the `ORIEL_MODEL`
+  env var; with neither, exit 2 suggesting `oriel models`. The same applies to `price` and
+  to `batch` rows without a `model` value.
+- **FR-003**: `gen` MUST support these options, each mapped to the Images API field:
+  `--aspect <ratio>` (`aspect_ratio`), `--resolution <r>` (`resolution`),
+  `--quality <q>` (`quality`), `--background <b>` (`background`), `--count`/`-n <n>`
+  (`n`), `--seed <int>` (`seed`), `--format <f>` (`output_format`),
+  `--compression <0-100>` (`output_compression`), `--ref <path-or-url>` repeatable
+  (`input_references`).
+- **FR-004**: Only options the user passed MUST be sent; omitted options use the model's
+  defaults. One exception: when the model supports `seed` and `--seed` isn't given, `gen`
+  MUST pick a random seed, send it and record it, so `regen` can repeat the generation.
+- **FR-005**: Each passed option MUST be validated against the model's
+  `supported_parameters` from the catalog. An option the model doesn't list, or a value
+  outside its enum/range, exits 2 with the allowed values in the message.
+- **FR-006**: `--ref` MUST accept local image files (PNG, JPEG, WebP; sent as base64 data
+  URLs) and `https://` URLs (sent as-is). It exits 2 if the model doesn't accept image
+  input, if a file is unreadable or not one of those types, or if more refs are passed
+  than the model's `input_references` maximum.
+- **FR-007**: Without `--out`, images MUST be saved in the current folder as
+  `oriel-<id>.<ext>` (one image) or `oriel-<id>-<k>.<ext>` (several, k from 1).
+- **FR-008**: `--out <path>` MUST be treated as a folder if it is an existing folder or
+  ends with a path separator (default names inside it), otherwise as a file path written
+  exactly; with several images a file path becomes `<stem>-<k><ext>`. Missing parent
+  folders are created.
+- **FR-009**: When `--out` has an image extension, `--format` isn't given and the model
+  supports `output_format` with that value, the CLI MUST request that format.
+- **FR-010**: The saved file's extension, when the CLI picks the name, MUST match the
+  image's actual format, taken from the response item's `media_type` (`.png`, `.jpg`,
+  `.webp`, `.svg`).
+- **FR-011**: `gen` MUST never overwrite an existing file unless `--force` is passed.
+- **FR-012**: Before any request to `POST /images`, `gen` MUST have checked: a key is
+  available, the model exists, all options are valid, all refs are readable, and every
+  output path is writable and free (or `--force`). Any failure exits without sending.
+- **FR-013**: `gen` MUST decode each returned image and write it; it MUST NOT move, copy or
+  delete images afterwards.
+- **FR-014**: After saving, `gen` MUST append exactly one ledger entry for the request
+  (FR-050) with the actual cost from `usage.cost`.
+- **FR-015**: Text output: stdout MUST be the saved paths, one per line; stderr shows
+  progress (only when stderr is a TTY) and one summary line with id, model and cost.
+  `--json` prints the ledger entry (FR-050) as the result.
+- **FR-016**: `gen` MUST NOT retry a failed generation automatically (a retry could be
+  charged twice).
+- **FR-017**: The generation request MUST time out after 5 minutes (exit 7).
+
+**Models: `oriel models [<id>] [--refresh] [--json]`**
+
+- **FR-020**: `models` MUST list every image model: id, name, whether it accepts reference
+  images (and how many), its options, and a one-line price summary (FR-034 kinds).
+- **FR-021**: `models <id>` MUST show one model in full: its options with allowed values,
+  and per provider its name, `supported_parameters` and pricing lines.
+- **FR-022**: The catalog (models plus their endpoint records) MUST be cached and refreshed
+  when older than 24 hours, or immediately with `--refresh`. The catalog endpoints need no
+  key.
+
+**Price: `oriel price [--model <id>] [gen options]`**
+
+- **FR-030**: `price` MUST accept the same model and options as `gen` (no prompt; its cost
+  is negligible), validate them the same way, and spend nothing.
+- **FR-031**: Price MUST be computed only from each pricing line's `unit` and `billable`,
+  never from the model's name.
+- **FR-032**: Output line selection: if the model has one output line per provider, use it.
+  If it has variant lines, a variant matches when its name equals the chosen
+  `resolution` (case-insensitive, e.g. `2k` ↔ `2K`) or `<quality>_<resolution>` (e.g.
+  `low_1k`); `high_resolution` matches any resolution above the lowest the model offers.
+  Exactly one matching variant → that line. No variant matching a chosen resolution, and a
+  line without a variant exists → that line (it's the base tier). Otherwise (no resolution
+  chosen, or a variant name that can't be matched) → the highest output line, as a
+  ceiling. If all candidate lines have the same price, it's exact.
+- **FR-033**: Reference lines MUST be added when refs are passed: `input_image` /
+  `input_reference` per `image` × number of refs, per `request` once.
+- **FR-034**: The result MUST have one of four kinds:
+  - `exact`: per-image price fully determined;
+  - `at_most`: a ceiling (several providers at different prices, or FR-032 ambiguity);
+  - `estimate`: from the newest ledger entry with the same model and the same settings
+    (all options except prompt and seed, including the number of refs). Per-token models:
+    its `prompt_tokens` × the highest current input per-token price + `completion_tokens`
+    × the current output per-token price. Per-megapixel models: its actual `cost_usd`
+    (billing isn't linear in megapixels). Per-image models whose computed price differs
+    from that entry's actual cost by more than $0.001: the actual cost, with a note
+    giving both;
+  - `unknown`: no matching history for those models, no pricing listed, or a `unit` Oriel
+    doesn't recognize. Never guessed.
+- **FR-035**: Per-image prices MUST be multiplied by `--count` (default 1).
+- **FR-036**: Any part of the cost the CLI can't compute (e.g. a pricing line whose
+  `billable` it doesn't recognize) MUST be listed in `notes` and makes the kind no better
+  than `estimate`.
+- **FR-037**: Text output shows the price in USD with up to three significant decimals
+  (`$0.007`, `$0.04`), prefixed `≤` for `at_most` and `~` for `estimate`.
+
+**Agent interface (all commands)**
+
+- **FR-040**: Exit codes MUST be stable:
+
+  | Code | Meaning | `error.code` | Retryable |
+  |------|---------|--------------|-----------|
+  | 0 | Success | | |
+  | 1 | Unexpected error, or a local write failed | `internal` | no |
+  | 2 | Invalid usage or input (flags, values, files, paths, interactive input needed without a TTY, OpenRouter 400) | `usage` | no |
+  | 3 | No key, or key rejected (401) | `auth` | no |
+  | 4 | Insufficient credits or key limit reached (402) | `credits` | no |
+  | 5 | Unknown model or ledger id (incl. OpenRouter 404) | `not_found` | no |
+  | 6 | Rate limited (429) | `rate_limited` | yes |
+  | 7 | OpenRouter, provider or network failure, or timeout (5xx, 524) | `upstream` | yes |
+  | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks) | `partial` | depends |
+
+- **FR-040a**: For exit 4, the message MUST say whether the account's credits or the key's
+  own limit ran out (from the error's `metadata.limit_source` when present) and link to
+  `https://openrouter.ai/settings/credits` for credits. For credits, it also says that
+  OpenRouter refuses generations when the balance is low, even if it covers the image's
+  price.
+- **FR-041**: `--json` MUST work on every command. Success: one JSON object on stdout.
+  Failure: `{"error": {"code", "message", "retryable"}}` on stdout. Nothing else on stdout.
+  Exit 8 is not a failure of the command: it prints the command's normal result (the
+  `batch` report, the `doctor` checks), whose per-item statuses say what failed.
+- **FR-042**: Logs, progress and warnings MUST go to stderr only. Color and progress
+  animation only when the stream is a TTY and `NO_COLOR` isn't set.
+- **FR-043**: The CLI MUST never prompt when stdin isn't a TTY.
+- **FR-044**: Every command MUST have `--help`; `oriel --version` prints the version.
+- **FR-045**: A `SKILL.md` MUST ship in the npm package describing every command, option,
+  JSON output shape and exit code.
+
+**Key**
+
+- **FR-046**: The key MUST come from `OPENROUTER_API_KEY` if set, otherwise from the saved
+  settings file.
+- **FR-047**: `oriel auth` MUST read the key with hidden input on a TTY, or from stdin with
+  `--stdin`; without a TTY and without `--stdin` it exits 2. The key is checked with
+  `GET /key` and saved only if valid, to a settings file with owner-only permissions (0600
+  on macOS and Linux; on Windows the file sits in the user's own profile folder).
+- **FR-048**: `oriel auth status` MUST report the source (`env`, `file` or `none`) and,
+  when a key exists, its validity, label, limit, limit remaining and usage from `GET /key`,
+  and the account balance from `GET /credits` (`null` if that call is refused).
+  `oriel auth logout` removes the saved key.
+- **FR-049**: The key MUST never appear in stdout, stderr, the ledger or the cache.
+
+**Ledger: history and show**
+
+- **FR-050**: Each ledger entry MUST be one JSON line with this shape (also `gen --json`'s
+  output):
+
+  ```json
+  {
+    "v": 1,
+    "id": "k3f9x2ab",
+    "created_at": "2026-10-17T14:03:11.204Z",
+    "model": "bytedance-seed/seedream-4.5",
+    "prompt": "a lighthouse at dusk",
+    "settings": { "aspect_ratio": "16:9", "resolution": "2K" },
+    "references": ["/home/me/site/sketch.png"],
+    "images": [
+      { "path": "/home/me/site/oriel-k3f9x2ab.jpg", "width": 2560, "height": 1440, "format": "jpeg" }
+    ],
+    "cost_usd": 0.04,
+    "usage": { "prompt_tokens": 17, "completion_tokens": 16384, "total_tokens": 16401 },
+    "provider": "Seed",
+    "generation_id": "gen-img-1792258557-72RzSYF8DvW74eAvO3UL",
+    "batch_id": null,
+    "row": null,
+    "regen_of": null
+  }
+  ```
+
+  `id` is 8 lowercase letters/digits, unique in the ledger. `settings` holds exactly the
+  options sent (including a seed picked under FR-004). Paths are absolute. `provider` and
+  `generation_id` come from the `x-provider-name` and `x-generation-id` response headers
+  (`null` if absent). `batch_id` and `row` are set for `batch` jobs, `regen_of` for
+  `regen`; otherwise `null`.
+- **FR-051**: The ledger MUST be append-only; each entry is written in a single append.
+- **FR-052**: Readers MUST skip lines that don't parse or have an unknown `v`, warning on
+  stderr, and ignore fields they don't know. Adding a field doesn't change `v`; changing or
+  removing one does.
+- **FR-053**: `oriel history [--limit <n>] [--model <id>] [--json]` MUST list entries newest
+  first, 20 by default. JSON: `{"entries": [<entry>, …]}`.
+- **FR-054**: `oriel show <id> [--json]` MUST print the full entry, with `"exists": true|false`
+  added to each image.
+
+**Requests**
+
+- **FR-055**: Every request to OpenRouter MUST send `X-OpenRouter-Title: Oriel` (and
+  `HTTP-Referer` once the project has a public URL).
+- **FR-056**: OpenRouter responses MUST be validated where they enter; an unexpected shape
+  (including an image item without `b64_json`) exits 7 with a message, never a crash
+  trace.
+
+**Batch (1B): `oriel batch <file> --budget <usd> [options]`**
+
+- **FR-070**: `batch` MUST read CSV (with a header row) or JSONL, chosen by the `.csv` or
+  `.jsonl` extension. Each row has `prompt` (required), `model` (required unless `--model`
+  or `ORIEL_MODEL` is set), and optionally the `gen` options as columns: `aspect`, `resolution`,
+  `quality`, `background`, `count`, `seed`, `format`, `compression`, `ref` (several refs
+  separated by `|` in CSV, an array in JSONL) and `out`. Unknown columns exit 2.
+- **FR-071**: `--budget <usd>` MUST be required. Options `--model`, `--out <folder>`
+  (default for rows without `out`), `--concurrency <1-8>` (default 2), `--force`,
+  `--dry-run`, `--resume <batch-id>` and `--json` are supported.
+- **FR-072**: Every row MUST be validated as `gen` validates (FR-012) before anything is
+  spent; any invalid row exits 2 with every bad row's number and reason.
+- **FR-073**: The budget is a per-run guard (the key's OpenRouter limit is the hard
+  stop). A row with a known price (`exact`, `at_most`, `estimate`) starts only if that
+  price fits in the budget minus what the batch has spent and the prices of rows still
+  running. A row with an `unknown` price starts only when no other row is running and the
+  budget has room left; once it finishes, its actual cost (per image) is the price of the
+  remaining rows with the same model and settings. So the batch can go over the budget by
+  at most one unknown-priced image. Rows that never fit are `skipped_budget`. Spending is
+  tracked from each finished row's actual `usage.cost`.
+- **FR-074**: Each finished row MUST append its own ledger entry with the batch's
+  `batch_id` and its 1-based `row`.
+- **FR-075**: A row failing with a retryable or `usage` error is marked `failed` and the
+  batch continues; a `credits` or `auth` error stops new rows from starting (FR-040 code
+  of that error). Rows are never retried automatically.
+- **FR-076**: `--resume <batch-id>` MUST skip rows that have a ledger entry for that batch
+  and row, and count that batch's earlier spending against `--budget`. The file is
+  expected to be the same; rows are matched by number.
+- **FR-077**: `--dry-run` MUST validate, print each row's price and the total, and spend
+  nothing.
+- **FR-078**: Exit 0 when every row succeeded; 3 or 4 when an auth or credits error
+  stopped the batch (FR-075); otherwise 8 when any row failed or was skipped.
+  Text mode: saved paths on stdout, progress on stderr.
+
+**Usage (1B): `oriel usage [--since <when>] [--until <when>] [--by model|day] [--json]`**
+
+- **FR-080**: `usage` MUST total `cost_usd`, generations and images from the ledger over a
+  period, grouped by model (default) or day. `--since`/`--until` take a date
+  (`2026-10-01`) or a relative span (`7d`, `30d`); default is the last 30 days.
+- **FR-081**: Entries with `null` cost MUST be counted in `unknown_cost_count`, not as $0.
+- **FR-082**: Days are calendar days in the user's local time zone.
+
+**Regen (1B): `oriel regen <id> [--out <path>] [--force] [--json]`**
+
+- **FR-085**: `regen` MUST send the original entry's model, prompt, `settings` (including
+  seed) and references unchanged; only the output location can be chosen (`--out`, same
+  rules as `gen`; default is the current folder).
+- **FR-086**: It MUST validate like `gen` before sending (model still exists and still
+  supports the settings, local references still exist) and append a new entry with
+  `regen_of`.
+
+**Models rank (1B): `oriel models rank [gen options] [--refs <n>] [--json]`**
+
+- **FR-090**: `models rank` MUST list only models that support every passed option and
+  value (and at least `--refs` references), sorted by the price for those options
+  (FR-034) cheapest first; `at_most` and `estimate` sort by their number; `unknown` last.
+
+**Doctor (1B): `oriel doctor [--json]`**
+
+- **FR-095**: `doctor` MUST run these checks, each `ok`, `warn` or `fail` with a fix: Node
+  version; key present and its source; key accepted by `GET /key`; key limit nearly used
+  (warn under 10% remaining); settings file permissions owner-only (macOS and Linux);
+  OpenRouter reachable;
+  catalog cache fresh or refreshable; config, data and cache folders writable; ledger
+  readable (warn with the count of skipped lines).
+- **FR-096**: Exit 0 when nothing fails (warnings allowed), 8 otherwise.
+
+**Schema (1B): `oriel schema`**
+
+- **FR-098**: `schema` MUST print (always JSON) the CLI version, every command with its
+  arguments and options (name, alias, type, allowed values, required, repeatable,
+  description), each command's output as JSON Schema, the error object's schema and the
+  exit code table.
+- **FR-099**: The schema MUST come from the same definitions the CLI uses to parse options
+  and produce output, so it can't drift; tests validate real output against it.
+
+**Release**
+
+- **FR-060**: The package MUST be `oriel` on npm, MIT-licensed (a `LICENSE` file and the
+  `license` field), require Node 22+ (`engines`), include no native modules, and ship as a
+  single package.
+- **FR-061**: The README MUST include install, a terminal example, an agent example, the
+  privacy sentence (images and history stay on your machine; prompts and reference images
+  go to OpenRouter and the model provider) and the tip to set a spending limit on the key.
+- **FR-062**: CI MUST run all tests on every push on Linux, macOS and Windows, and publish
+  to npm on a version tag.
+- **FR-063**: CI MUST pack the CLI as npm would publish it, install it in an empty folder
+  and run `oriel --version` and `oriel models --json` (against a fake) before publishing.
+- **FR-064**: Tests MUST never call the real OpenRouter API or touch the user's real
+  settings, ledger or cache.
+
+### Key Entities
+
+- **Ledger entry**: one generation request and its result (FR-050). Never edited.
+- **Catalog**: image models with their options and, per provider, capabilities and pricing
+  lines. Cached, refreshed daily.
+- **Price result**: model, settings, kind, `cost_usd` (`null` when unknown), notes.
+- **Batch**: a run of one input file under one budget, identified by `batch_id`; its rows'
+  results live only as ledger entries (plus the printed report).
+- **Settings file**: the saved key, owner-only.
+
+### JSON output shapes (other commands)
+
+- `models`: `{"models": [{"id", "name", "accepts_references", "max_references", "parameters", "price"}], "fetched_at"}`
+- `models <id>`: `{"id", "name", "description", "parameters", "endpoints": [{"provider_name", "provider_tag", "supported_parameters", "pricing"}], "fetched_at"}`
+- `price`: `{"model", "settings", "kind", "cost_usd", "notes": []}`
+- `auth`: `{"saved": true, "label"}`; `auth status`: `{"source", "valid", "label", "limit_usd", "limit_remaining_usd", "usage_usd", "balance_usd"}`; `auth logout`: `{"removed": true|false}`
+- `batch`: `{"batch_id", "budget_usd", "spent_usd", "rows": [{"row", "status": "ok|failed|skipped_budget|skipped_resumed|not_run", "id", "paths", "cost_usd", "price", "error"}]}`; with `--dry-run`, `{"rows": [{"row", "price"}], "total": <price>}`
+- `usage`: `{"since", "until", "by", "total_usd", "generations", "images", "unknown_cost_count", "groups": [{"key", "total_usd", "generations", "images", "unknown_cost_count"}]}`
+- `regen`: the new ledger entry (as `gen`)
+- `models rank`: `{"settings", "models": [{"id", "name", "price"}]}`
+- `doctor`: `{"checks": [{"name", "status": "ok|warn|fail", "message", "fix"}]}`
+- `schema`: `{"version", "commands": [...], "error", "exit_codes": [...]}`
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: A developer with an OpenRouter key goes from `npm install -g oriel` to a saved
+  image in under 2 minutes.
+- **SC-002**: In a manual check across at least 5 per-image models, every `exact` price
+  equals the charged `usage.cost`, except where the catalog itself is wrong (Riverflow,
+  found 2026-10-17); there, after one generation, `price` shows the last actual cost.
+- **SC-003**: Every command, run with `--json` in every success and failure case covered by
+  the tests, produces stdout that parses as one JSON object, with the documented exit code.
+- **SC-004**: No test reaches the network or the user's real folders; the suite runs offline.
+- **SC-005**: `history` and `show` respond in under 1 second with 10,000 ledger entries.
+- **SC-006**: 20 concurrent `gen` runs against a fake produce 20 complete ledger lines.
+- **SC-007**: An agent given only `SKILL.md` and `--help` can generate an image to a given
+  path and report its cost without human help.
+- **SC-008**: In tests against a fake with fixed prices, no batch spends more than its
+  budget when every price is known, and never more than the budget plus one image when some
+  are unknown.
+
+## Assumptions
+
+- Images arrive as base64 in `data[].b64_json` with a `media_type` (checked live across
+  five providers; none returned a URL).
+- No saved default model (only `ORIEL_MODEL`), no provider pinning, no streaming, no
+  single-generation `--max-cost`; all can be added without breaking the interface.
+- Text output layout (tables, wording) is for humans and may change; JSON output and exit
+  codes may not without the owner's approval (constitution V).
+- `doctor` doesn't check for newer CLI versions (no calls to npm).
+- Out of scope (`docs/ideas/`): `oriel auth login` (OAuth), OS keychain, standalone
+  download, AUR and other package managers, the weekly pricing-format CI check, `oriel tui`.
+
+## Live API checks (2026-10-17)
+
+1A's **(verify)** items had to be checked against the live API before planning. All are
+settled; details and figures in `docs/openrouter-api.md` → Charged vs listed.
+
+1. **Image format:** always base64 with `media_type`; no URLs (FR-010, FR-056).
+2. **Generation id and provider:** in the `x-generation-id` and `x-provider-name` response
+   headers (FR-050).
+3. **Per-token counts:** stable within 0.5% for the same settings, so `estimate` is sound
+   (FR-034).
+4. **Variant-less lines:** the base tier; `high_resolution` is above the lowest resolution
+   (FR-032).
+5. **Per-megapixel billing:** not linear, so Flux.2 is priced from the last actual cost
+   (FR-034).
+6. **Balance:** `GET /credits` works with an ordinary key (FR-048).
+
+Also found: the catalog can list the wrong price (Riverflow v2.5 Fast charged ~$0.031,
+listed $0.019), which FR-034's per-image `estimate` corrects after one generation; and
+OpenRouter refuses generations at a low balance (FR-040a).
