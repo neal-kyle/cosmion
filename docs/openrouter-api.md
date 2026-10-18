@@ -1,6 +1,6 @@
-# OpenRouter API reference (for Oriel)
+# OpenRouter API reference (for Cosmion)
 
-The parts of OpenRouter's API that Oriel uses. Gathered from openrouter.ai's docs on
+The parts of OpenRouter's API that Cosmion uses. Gathered from openrouter.ai's docs on
 2026-10-17 and checked against the live API the same day. Items marked **(verify)** are
 unclear and must be checked live before a spec depends on them; none are open.
 
@@ -60,7 +60,7 @@ Response headers: `x-generation-id: gen-img-…` and `x-provider-name: Seed`.
 - Images come back as **base64** in `data[].b64_json`, with the format in `media_type`
   (`image/png`, `image/jpeg`, `image/webp`, `image/svg+xml`). Six models across five
   providers (Seed, Black Forest Labs, Google, Recraft, Sourceful) all did this; none
-  returned a URL. Oriel decodes them and writes the file where asked.
+  returned a URL. Cosmion decodes them and writes the file where asked.
 - `usage.cost` is the **actual cost in USD**, so it can be recorded in the ledger directly
   without a second request.
 - The generation id and the provider that served it are in the **response headers**, not
@@ -157,7 +157,7 @@ counts are stable for a given size. Per-megapixel lines aren't enough to price F
 at least one provider charges something other than its listed price. The ledger records
 the actual cost, which corrects both (below).
 
-### How Oriel shows price
+### How Cosmion shows price
 
 - **Per-image models:** the exact price before generating. With variant lines, the line
   matching the chosen resolution (or `<quality>_<resolution>`) applies; a line without a
@@ -183,7 +183,7 @@ the actual cost, which corrects both (below).
     then corrects itself from the new generation.
 - **No per-model code.** Pricing is computed from each line's `unit`, never from the
   model's name, so new models priced in a known unit work automatically.
-  - **Unknown `unit`** (one OpenRouter adds later): show "Price not listed" until Oriel
+  - **Unknown `unit`** (one OpenRouter adds later): show "Price not listed" until Cosmion
     supports it. Never guess.
   - **Unknown `variant` name** (can't be matched to the chosen settings): show the
     highest output line as a ceiling ("≤").
@@ -205,14 +205,14 @@ Returns `limit` (spending limit or `null`), `limit_remaining`, `limit_reset`, `u
 usage fields and more; `label` defaults to a masked form of the key
 (e.g. `sk-or-v1-abc...xyz`).
 
-Useful for: checking a key works (`oriel auth`), and showing remaining budget when the key
+Useful for: checking a key works (`cosmion auth`), and showing remaining budget when the key
 has a limit.
 
 ### `GET /credits`: account balance
 
 Returns `total_credits` and `total_usage` (balance = credits − usage). The docs list a
 403 "Only management keys can perform this operation", but an ordinary key gets 200
-(checked live 2026-10-17). Still unchecked for OAuth-issued keys (relevant once `oriel auth login` exists).
+(checked live 2026-10-17). Still unchecked for OAuth-issued keys (relevant once `cosmion auth login` exists).
 
 **A low balance blocks generating before it runs out.** Live, 2026-10-17: with a balance
 of $0.52, `POST /images` returned 402 even for a $0.007 image, and nothing was charged.
@@ -235,16 +235,16 @@ header if timing details are ever wanted.
    → `{ "key": "sk-or-v1-…", "user_id": "…" }`. Store the key.
 
 **Localhost callbacks work on any port** (e.g. `http://localhost:51423/callback`), made
-for CLI and local apps: `oriel auth login` (later) can start a temporary local server on
+for CLI and local apps: `cosmion auth login` (later) can start a temporary local server on
 a free port. Such apps get the fixed title `localhost:<port>` on OpenRouter and don't
 appear in its rankings; a public callback URL is needed for that.
 
 ## Attribution (optional headers)
 
 - `HTTP-Referer`: the project's URL (the landing page or repo).
-- `X-OpenRouter-Title` (or `X-Title`): `Oriel`.
+- `X-OpenRouter-Title` (or `X-Title`): `Cosmion`.
 
-Shows Oriel on openrouter.ai. The CLI sends the title now and the URL once there is one.
+Shows Cosmion on openrouter.ai. The CLI sends the title now and the URL once there is one.
 
 ## Errors
 
@@ -263,7 +263,7 @@ Shape: `{ "error": { "code": <int>, "message": "<text>" } }`.
 ## Not used
 
 - Chat completions with `modalities: ["image","text"]`: the older way to generate images.
-  The Images API replaces it for Oriel.
+  The Images API replaces it for Cosmion.
 - The official `@openrouter/sdk` TypeScript package exists. Plain `fetch` is enough for
   the handful of endpoints above, avoids a dependency and keeps control over parsing
-  (validated with zod). Revisit if the API surface Oriel uses grows.
+  (validated with zod). Revisit if the API surface Cosmion uses grows.

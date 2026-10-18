@@ -1,6 +1,6 @@
 # Desktop app: exploration, not planned
 
-> **This is not planned.** Oriel is a CLI. This page keeps architecture
+> **This is not planned.** Cosmion is a CLI. This page keeps architecture
 > thinking about a possible desktop app, done in October 2026, so it isn't
 > lost if the idea is ever picked up. Nothing here is promised, scheduled or being built.
 
@@ -18,7 +18,7 @@ decides whether a signed Mac build is needed.
   (`packages/core`, npm workspaces) at that point. That move is mechanical because
   `src/core` never imports from the CLI. At runtime the two would know nothing about each
   other: separate settings, history and images. The CLI's folders are already named
-  `oriel-cli` so they'd never collide with the app's (macOS folder names are
+  `cosmion-cli` so they'd never collide with the app's (macOS folder names are
   case-insensitive).
 - **The app would fully own its library**, so its images can't go missing behind its
   back; the CLI keeps saving where it's asked and never manages images afterwards.
@@ -47,7 +47,7 @@ week, CI, screenshot testing, installers and "how to open" docs 2–3 days.
 
 #### Library
 
-- **Images:** `~/Pictures/Oriel` (the OS pictures folder), visible to the user.
+- **Images:** `~/Pictures/Cosmion` (the OS pictures folder), visible to the user.
 - **Records:** SQLite (better-sqlite3) in the app's data folder: generations (prompt,
   model, settings, cost, token counts, provider, file, dimensions, thread, time) and
   threads (id, name, time). A database here because the Gallery needs fast sorting,

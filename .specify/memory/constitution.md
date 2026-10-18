@@ -1,9 +1,9 @@
-# Oriel Constitution
+# Cosmion Constitution
 
-Oriel is a CLI (`oriel`) for generating images with any model on OpenRouter,
+Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
 bring-your-own-key, for developers and their agents. It is maintained by one person, not
 a full-time developer, working with an AI agent; every principle below serves that.
-These rules apply to everyone who works on Oriel, people and agents alike.
+These rules apply to everyone who works on Cosmion, people and agents alike.
 
 ## Core Principles
 
@@ -74,7 +74,7 @@ These are the source of truth:
 
 - `specs/`: each feature's spec, plan and tasks: what's built and how, including the
   technical decisions and their reasons.
-- `docs/openrouter-api.md`: the OpenRouter API as Oriel uses it. Items marked
+- `docs/openrouter-api.md`: the OpenRouter API as Cosmion uses it. Items marked
   **(verify)** must be checked against the live API before a spec depends on them.
 
 Settled decisions in these documents aren't re-litigated quietly: if one seems wrong,

@@ -1,4 +1,4 @@
-# Feature Specification: Oriel CLI
+# Feature Specification: Cosmion CLI
 
 **Feature Branch**: `001-cli`
 
@@ -11,18 +11,15 @@ to build the CLI. Follow the principles laid out in CLAUDE.md when creating it."
 
 ## Overview
 
-`oriel`: a command-line tool that generates images with any
+`cosmion`: a command-line tool that generates images with any
 image model on OpenRouter using the user's own key, saves them where asked, tells the user
 what a generation will cost before spending, and keeps a private local record of what was
 made and what it cost. It is built for developers and the agents they run, so every
 command has a stable machine-readable interface.
 
-This spec covers two phases, each shipped as releases:
-
-| Phase | Release | Commands |
-|-------|---------|----------|
-| 1A | v0.1 | `gen`, `models`, `price`, `history`, `show`, `auth` (Stories 1–6) |
-| 1B | v0.2 onward, one minor release per command or two | `batch`, `usage`, `regen`, `models rank`, `doctor`, `schema` (Stories 7–12) |
+Everything in this spec ships together as **v0.1**: `gen`, `models`, `price`, `history`,
+`show`, `auth`, `batch`, `usage`, `regen`, `models rank`, `doctor` and `schema`
+(Stories 1–12). The build order is set by the tasks' phases, not by releases.
 
 Ideas for later (OAuth sign-in, OS keychain, extra distribution channels, a TUI;
 `docs/ideas/`) are not part of this spec. How it's built (`src/core` and `src/cli`, JSON Lines ledger, folders,
@@ -35,9 +32,14 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 
 - Q: Should the spec cover only Milestones 1A + 1B, or also the CLI items in the roadmap's Later list? → A: 1A + 1B; Later items stay out.
 - Q: Given that the key's spending limit (set on OpenRouter) is the real hard stop, what should `batch --budget` be? → A: A required per-run guard: rows start only while the budget has room; unknown-priced rows run one at a time and the first one's actual cost prices the rest; it can go over by at most one image.
-- Q: Should `oriel gen` require `--model` every time, or allow a default model? → A: `--model`, otherwise the `ORIEL_MODEL` env var; neither → exit 2.
-- Q: Which license should Oriel be released under? → A: MIT.
+- Q: Should `cosmion gen` require `--model` every time, or allow a default model? → A: `--model`, otherwise the `COSMION_MODEL` env var; neither → exit 2.
+- Q: Which license should Cosmion be released under? → A: MIT.
 - Q: Can the five open API questions be settled now with a few real generations? → A: Yes. Done on 2026-10-17 after topping up the account ($0.33 spent; see "Live API checks" below). Earlier attempts at a $0.52 balance were refused even for a $0.007 image (FR-040a), and showed that `GET /credits` works with an ordinary key (FR-048).
+
+### Session 2026-10-18
+
+- Q: Should 1A (v0.1) and 1B (v0.2 onward) stay separate releases? → A: No. All twelve stories ship together as v0.1; tasks still build them in phases.
+- Q: What is the tool called? → A: Cosmion (renamed from Oriel, which had trademark and naming conflicts). The package is `cosmion`; it installs two commands, `cosmion` and the short `csm`. Docs and help use `cosmion`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -50,18 +52,18 @@ along with what it actually cost.
 **Why this priority**: It's the product. Everything else supports it.
 
 **Independent Test**: With `OPENROUTER_API_KEY` set and a fake OpenRouter, run
-`oriel gen "a lighthouse" --model <id>` and check the file, the printed path and cost,
+`cosmion gen "a lighthouse" --model <id>` and check the file, the printed path and cost,
 and the new ledger line.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid key, **When** I run `oriel gen "a lighthouse at dusk" -m bytedance-seed/seedream-4.5`,
-   **Then** an image is saved as `./oriel-<id>.jpg` (Seedream returns JPEG), its path is
+1. **Given** a valid key, **When** I run `cosmion gen "a lighthouse at dusk" -m bytedance-seed/seedream-4.5`,
+   **Then** an image is saved as `./cosmion-<id>.jpg` (Seedream returns JPEG), its path is
    printed, and a summary with id, model and actual cost is shown.
-2. **Given** a valid key, **When** I run `oriel gen "hero" -m <id> --out assets/hero.png`,
+2. **Given** a valid key, **When** I run `cosmion gen "hero" -m <id> --out assets/hero.png`,
    **Then** the image is saved at exactly `assets/hero.png`, creating `assets/` if missing.
 3. **Given** `--count 3 --out shots/`, **When** the model returns 3 images, **Then** they
-   are saved as `shots/oriel-<id>-1.<ext>` … `-3.<ext>` and all three appear in one
+   are saved as `shots/cosmion-<id>-1.<ext>` … `-3.<ext>` and all three appear in one
    ledger entry.
 4. **Given** a model that accepts reference images, **When** I pass `--ref sketch.png`,
    **Then** the image is sent as a reference and the ledger records the reference's path.
@@ -75,9 +77,9 @@ and the new ledger line.
 
 ---
 
-### User Story 2 - An agent drives Oriel reliably (Priority: P1)
+### User Story 2 - An agent drives Cosmion reliably (Priority: P1)
 
-An AI agent uses `oriel` as a tool: it reads structured output, branches on exit codes,
+An AI agent uses `cosmion` as a tool: it reads structured output, branches on exit codes,
 learns the tool from `--help` and `SKILL.md`, and is never left hanging on a prompt.
 
 **Why this priority**: Agents are a primary audience; breaking this contract later is a
@@ -107,19 +109,19 @@ is in use and how much of its limit remains, without the key ever being printed.
 **Why this priority**: Humans need it to start; agents can use the env var instead, so
 `gen` is usable without it.
 
-**Independent Test**: Run `oriel auth` with a key on stdin (`--stdin`) against a fake
+**Independent Test**: Run `cosmion auth` with a key on stdin (`--stdin`) against a fake
 `/key` endpoint; check the settings file's contents and permissions, then `auth status`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a terminal, **When** I run `oriel auth` and paste a valid key, **Then** input
+1. **Given** a terminal, **When** I run `cosmion auth` and paste a valid key, **Then** input
    is hidden, the key is checked with OpenRouter, saved to a file only I can read, and the
    key's label is shown.
-2. **Given** an invalid key, **When** I run `oriel auth`, **Then** nothing is saved and
+2. **Given** an invalid key, **When** I run `cosmion auth`, **Then** nothing is saved and
    the CLI exits 3.
-3. **Given** both `OPENROUTER_API_KEY` and a saved key, **When** I run `oriel auth status`,
+3. **Given** both `OPENROUTER_API_KEY` and a saved key, **When** I run `cosmion auth status`,
    **Then** it reports the env var as the source in use.
-4. **Given** a saved key, **When** I run `oriel auth logout`, **Then** the saved key is
+4. **Given** a saved key, **When** I run `cosmion auth logout`, **Then** the saved key is
    removed.
 
 ---
@@ -129,15 +131,15 @@ is in use and how much of its limit remains, without the key ever being printed.
 A developer lists image models with their capabilities and prices, and asks what a
 specific generation will cost before spending anything.
 
-**Why this priority**: Exact prices before spending are a core promise of Oriel, but
+**Why this priority**: Exact prices before spending are a core promise of Cosmion, but
 generating works without them.
 
-**Independent Test**: With a fake catalog covering each pricing kind, run `oriel models`,
-`oriel models <id>` and `oriel price` and compare against expected prices.
+**Independent Test**: With a fake catalog covering each pricing kind, run `cosmion models`,
+`cosmion models <id>` and `cosmion price` and compare against expected prices.
 
 **Acceptance Scenarios**:
 
-1. **Given** a per-image model, **When** I run `oriel price -m bytedance-seed/seedream-4.5`,
+1. **Given** a per-image model, **When** I run `cosmion price -m bytedance-seed/seedream-4.5`,
    **Then** it shows the exact price, `kind: "exact"`.
 2. **Given** a model with tiered lines (`1k`, `2k`), **When** I run `price --resolution 2K`,
    **Then** it uses the `2k` line exactly.
@@ -170,21 +172,21 @@ image is still where it was saved.
 **Why this priority**: Valuable record-keeping, and the ledger it reads is already written
 by Story 1.
 
-**Independent Test**: Seed a ledger file; run `oriel history` and `oriel show <id>`.
+**Independent Test**: Seed a ledger file; run `cosmion history` and `cosmion show <id>`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a ledger with 50 entries, **When** I run `oriel history`, **Then** the 20
+1. **Given** a ledger with 50 entries, **When** I run `cosmion history`, **Then** the 20
    newest are shown, newest first, with id, time, model, cost, prompt (shortened) and path.
-2. **Given** an entry whose image was moved, **When** I run `oriel show <id>`, **Then** the
+2. **Given** an entry whose image was moved, **When** I run `cosmion show <id>`, **Then** the
    full entry is shown and the image is marked as no longer at its saved path.
-3. **Given** an unknown id, **When** I run `oriel show <id>`, **Then** the CLI exits 5.
+3. **Given** an unknown id, **When** I run `cosmion show <id>`, **Then** the CLI exits 5.
 
 ---
 
 ### User Story 6 - Install from npm (Priority: P3)
 
-A developer installs with `npm install -g oriel` on Node 22+ and it works on macOS,
+A developer installs with `npm install -g cosmion` on Node 22+ and it works on macOS,
 Windows and Linux with no build step (CI runs the tests on all three).
 
 **Why this priority**: Required to ship, but has no behavior of its own.
@@ -194,22 +196,22 @@ Windows and Linux with no build step (CI runs the tests on all three).
 **Acceptance Scenarios**:
 
 1. **Given** Node 22+, **When** I install the packed tarball into an empty folder,
-   **Then** `oriel --version` and `oriel --help` work.
+   **Then** `cosmion --version` and `cosmion --help` work.
 2. **Given** Node older than 22, **When** I install, **Then** npm reports the engine
    requirement.
 
 ---
 
-### User Story 7 - Generate many images within a budget (Priority: P2, phase 1B)
+### User Story 7 - Generate many images within a budget (Priority: P2)
 
-A developer or agent hands Oriel a CSV or JSONL file of prompts and a dollar budget for
-that run; Oriel stops starting rows once the budget is used, and can pick up where it left
+A developer or agent hands Cosmion a CSV or JSONL file of prompts and a dollar budget for
+that run; Cosmion stops starting rows once the budget is used, and can pick up where it left
 off after a failure. The key's own spending limit on OpenRouter stays the hard stop; the
 budget limits one run without touching it.
 
-**Why this priority**: The biggest 1B feature, and the one where a bug costs real money.
+**Why this priority**: The biggest feature after `gen`, and the one where a bug costs real money.
 
-**Independent Test**: Run `oriel batch jobs.csv --budget 0.20` against a fake with known
+**Independent Test**: Run `cosmion batch jobs.csv --budget 0.20` against a fake with known
 prices; check files, ledger entries, the report and that spending stops at the cap.
 
 **Acceptance Scenarios**:
@@ -231,17 +233,17 @@ prices; check files, ledger entries, the report and that spending stops at the c
 
 ---
 
-### User Story 8 - See what I've spent (Priority: P3, phase 1B)
+### User Story 8 - See what I've spent (Priority: P3)
 
 A developer sees their total spending over a period, broken down by model or by day.
 
 **Why this priority**: Useful, and it only reads the ledger.
 
-**Independent Test**: Seed a ledger with known costs and dates; run `oriel usage`.
+**Independent Test**: Seed a ledger with known costs and dates; run `cosmion usage`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a ledger, **When** I run `oriel usage`, **Then** it shows the total cost,
+1. **Given** a ledger, **When** I run `cosmion usage`, **Then** it shows the total cost,
    generations and images for the last 30 days, grouped by model.
 2. **Given** `--since 2026-10-01 --by day`, **When** I run `usage`, **Then** it shows one
    row per day from that date.
@@ -250,19 +252,19 @@ A developer sees their total spending over a period, broken down by model or by 
 
 ---
 
-### User Story 9 - Re-run a past generation exactly (Priority: P3, phase 1B)
+### User Story 9 - Re-run a past generation exactly (Priority: P3)
 
 A developer re-runs a past generation with the same model, prompt, settings, seed and
 references, to get another copy or recover a deleted file.
 
 **Why this priority**: Convenience built on the ledger.
 
-**Independent Test**: Seed a ledger entry; run `oriel regen <id>` against a fake and check
+**Independent Test**: Seed a ledger entry; run `cosmion regen <id>` against a fake and check
 the request matches the original exactly.
 
 **Acceptance Scenarios**:
 
-1. **Given** a past entry, **When** I run `oriel regen <id>`, **Then** OpenRouter receives
+1. **Given** a past entry, **When** I run `cosmion regen <id>`, **Then** OpenRouter receives
    the same model, prompt, settings, seed and references, and a new entry records
    `regen_of: <id>`.
 2. **Given** a past entry whose local reference file no longer exists, **When** I run
@@ -270,7 +272,7 @@ the request matches the original exactly.
 
 ---
 
-### User Story 10 - Find the right model for a job (Priority: P3, phase 1B)
+### User Story 10 - Find the right model for a job (Priority: P3)
 
 A developer asks which models can do what they need (e.g. 4K, transparent background, two
 references) and sees them ranked cheapest first.
@@ -278,19 +280,19 @@ references) and sees them ranked cheapest first.
 **Why this priority**: Helps choosing among 60+ models, but `models` and `price` already
 answer it by hand.
 
-**Independent Test**: With a fake catalog, run `oriel models rank` with capability options
+**Independent Test**: With a fake catalog, run `cosmion models rank` with capability options
 and check filtering and order.
 
 **Acceptance Scenarios**:
 
-1. **Given** `oriel models rank --resolution 4K`, **When** run, **Then** only models that
+1. **Given** `cosmion models rank --resolution 4K`, **When** run, **Then** only models that
    offer 4K are listed, cheapest first for 4K, unknown prices last.
 2. **Given** `--refs 2 --background transparent`, **When** run, **Then** only models that
    accept 2+ references and a transparent background are listed.
 
 ---
 
-### User Story 11 - Check that everything works (Priority: P3, phase 1B)
+### User Story 11 - Check that everything works (Priority: P3)
 
 A developer or agent runs one command that checks the setup and says what's wrong and how
 to fix it.
@@ -298,30 +300,30 @@ to fix it.
 **Why this priority**: Saves support time; nothing depends on it.
 
 **Independent Test**: Break each checked thing in a temporary setup (no key, bad key,
-wrong file permissions, cut-off ledger line) and run `oriel doctor --json`.
+wrong file permissions, cut-off ledger line) and run `cosmion doctor --json`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a healthy setup, **When** I run `oriel doctor`, **Then** every check passes
+1. **Given** a healthy setup, **When** I run `cosmion doctor`, **Then** every check passes
    and it exits 0.
 2. **Given** a settings file readable by others, **When** I run `doctor`, **Then** that
    check fails with the fix, and the CLI exits 8.
 
 ---
 
-### User Story 12 - An agent discovers the whole interface (Priority: P2, phase 1B)
+### User Story 12 - An agent discovers the whole interface (Priority: P2)
 
 An agent asks the CLI for a machine-readable description of every command, option, output
 shape and exit code, instead of parsing `--help`.
 
-**Why this priority**: Makes Oriel easy to wire into any agent harness.
+**Why this priority**: Makes Cosmion easy to wire into any agent harness.
 
-**Independent Test**: Run `oriel schema`; validate each command's real `--json` output in
+**Independent Test**: Run `cosmion schema`; validate each command's real `--json` output in
 the test suite against the shape it declares.
 
 **Acceptance Scenarios**:
 
-1. **Given** any release, **When** I run `oriel schema`, **Then** it prints every command
+1. **Given** any release, **When** I run `cosmion schema`, **Then** it prints every command
    with its options, output JSON Schema and the exit code table.
 2. **Given** the test suite, **When** every command's `--json` output is checked against
    its declared schema, **Then** all match.
@@ -343,7 +345,7 @@ the test suite against the shape it declares.
 - **Ledger entry from a newer CLI** (unknown format version): skipped with a warning.
 - **Ledger can't be written** after a successful save: the image stays, a warning goes to
   stderr, exit 0 (the image, the main result, exists).
-- **Several `oriel gen` processes at once:** every entry lands as a complete line.
+- **Several `cosmion gen` processes at once:** every entry lands as a complete line.
 - **Model not in the cached catalog:** refresh once, then exit 5 if still unknown.
 - **Catalog refresh fails** (offline) **with a cache present:** use the stale cache and warn.
   With no cache: exit 7.
@@ -352,7 +354,7 @@ the test suite against the shape it declares.
   write to the exact path anyway, warn on stderr, report the real format.
 - **SVG output** (Recraft vector models): saved as `.svg`; width and height are `null`.
 - **Missing `usage.cost`** in the response: cost recorded as `null`, warning on stderr.
-- **Key set via env var while running `oriel auth`:** the key is saved, with a warning that
+- **Key set via env var while running `cosmion auth`:** the key is saved, with a warning that
   the env var takes precedence.
 - **Batch interrupted** (Ctrl-C, crash): finished rows are already in the ledger;
   `--resume <batch-id>` continues.
@@ -367,12 +369,12 @@ the test suite against the shape it declares.
 
 ### Functional Requirements
 
-**Generating: `oriel gen <prompt> [--model <id>] [options]`**
+**Generating: `cosmion gen <prompt> [--model <id>] [options]`**
 
 - **FR-001**: `gen` MUST take the prompt as its argument, or read it from stdin when the
   argument is `-`. An empty prompt exits 2.
-- **FR-002**: The model MUST come from `--model`/`-m <id>`, otherwise the `ORIEL_MODEL`
-  env var; with neither, exit 2 suggesting `oriel models`. The same applies to `price` and
+- **FR-002**: The model MUST come from `--model`/`-m <id>`, otherwise the `COSMION_MODEL`
+  env var; with neither, exit 2 suggesting `cosmion models`. The same applies to `price` and
   to `batch` rows without a `model` value.
 - **FR-003**: `gen` MUST support these options, each mapped to the Images API field:
   `--aspect <ratio>` (`aspect_ratio`), `--resolution <r>` (`resolution`),
@@ -391,7 +393,7 @@ the test suite against the shape it declares.
   input, if a file is unreadable or not one of those types, or if more refs are passed
   than the model's `input_references` maximum.
 - **FR-007**: Without `--out`, images MUST be saved in the current folder as
-  `oriel-<id>.<ext>` (one image) or `oriel-<id>-<k>.<ext>` (several, k from 1).
+  `cosmion-<id>.<ext>` (one image) or `cosmion-<id>-<k>.<ext>` (several, k from 1).
 - **FR-008**: `--out <path>` MUST be treated as a folder if it is an existing folder or
   ends with a path separator (default names inside it), otherwise as a file path written
   exactly; with several images a file path becomes `<stem>-<k><ext>`. Missing parent
@@ -416,7 +418,7 @@ the test suite against the shape it declares.
   charged twice).
 - **FR-017**: The generation request MUST time out after 5 minutes (exit 7).
 
-**Models: `oriel models [<id>] [--refresh] [--json]`**
+**Models: `cosmion models [<id>] [--refresh] [--json]`**
 
 - **FR-020**: `models` MUST list every image model: id, name, whether it accepts reference
   images (and how many), its options, and a one-line price summary (FR-034 kinds).
@@ -426,7 +428,7 @@ the test suite against the shape it declares.
   when older than 24 hours, or immediately with `--refresh`. The catalog endpoints need no
   key.
 
-**Price: `oriel price [--model <id>] [gen options]`**
+**Price: `cosmion price [--model <id>] [gen options]`**
 
 - **FR-030**: `price` MUST accept the same model and options as `gen` (no prompt; its cost
   is negligible), validate them the same way, and spend nothing.
@@ -452,7 +454,7 @@ the test suite against the shape it declares.
     (billing isn't linear in megapixels). Per-image models whose computed price differs
     from that entry's actual cost by more than $0.001: the actual cost, with a note
     giving both;
-  - `unknown`: no matching history for those models, no pricing listed, or a `unit` Oriel
+  - `unknown`: no matching history for those models, no pricing listed, or a `unit` Cosmion
     doesn't recognize. Never guessed.
 - **FR-035**: Per-image prices MUST be multiplied by `--count` (default 1).
 - **FR-036**: Any part of the cost the CLI can't compute (e.g. a pricing line whose
@@ -489,7 +491,10 @@ the test suite against the shape it declares.
 - **FR-042**: Logs, progress and warnings MUST go to stderr only. Color and progress
   animation only when the stream is a TTY and `NO_COLOR` isn't set.
 - **FR-043**: The CLI MUST never prompt when stdin isn't a TTY.
-- **FR-044**: Every command MUST have `--help`; `oriel --version` prints the version.
+- **FR-044**: Every command MUST have `--help`; `cosmion --version` prints the version.
+- **FR-044a**: The package MUST install the CLI as two commands, `cosmion` and `csm`, that
+  behave identically. Help text, `SKILL.md` and the README use `cosmion` and mention `csm`
+  as the short form.
 - **FR-045**: A `SKILL.md` MUST ship in the npm package describing every command, option,
   JSON output shape and exit code.
 
@@ -497,14 +502,14 @@ the test suite against the shape it declares.
 
 - **FR-046**: The key MUST come from `OPENROUTER_API_KEY` if set, otherwise from the saved
   settings file.
-- **FR-047**: `oriel auth` MUST read the key with hidden input on a TTY, or from stdin with
+- **FR-047**: `cosmion auth` MUST read the key with hidden input on a TTY, or from stdin with
   `--stdin`; without a TTY and without `--stdin` it exits 2. The key is checked with
   `GET /key` and saved only if valid, to a settings file with owner-only permissions (0600
   on macOS and Linux; on Windows the file sits in the user's own profile folder).
-- **FR-048**: `oriel auth status` MUST report the source (`env`, `file` or `none`) and,
+- **FR-048**: `cosmion auth status` MUST report the source (`env`, `file` or `none`) and,
   when a key exists, its validity, label, limit, limit remaining and usage from `GET /key`,
   and the account balance from `GET /credits` (`null` if that call is refused).
-  `oriel auth logout` removes the saved key.
+  `cosmion auth logout` removes the saved key.
 - **FR-049**: The key MUST never appear in stdout, stderr, the ledger or the cache.
 
 **Ledger: history and show**
@@ -522,7 +527,7 @@ the test suite against the shape it declares.
     "settings": { "aspect_ratio": "16:9", "resolution": "2K" },
     "references": ["/home/me/site/sketch.png"],
     "images": [
-      { "path": "/home/me/site/oriel-k3f9x2ab.jpg", "width": 2560, "height": 1440, "format": "jpeg" }
+      { "path": "/home/me/site/cosmion-k3f9x2ab.jpg", "width": 2560, "height": 1440, "format": "jpeg" }
     ],
     "cost_usd": 0.04,
     "usage": { "prompt_tokens": 17, "completion_tokens": 16384, "total_tokens": 16401 },
@@ -543,24 +548,24 @@ the test suite against the shape it declares.
 - **FR-052**: Readers MUST skip lines that don't parse or have an unknown `v`, warning on
   stderr, and ignore fields they don't know. Adding a field doesn't change `v`; changing or
   removing one does.
-- **FR-053**: `oriel history [--limit <n>] [--model <id>] [--json]` MUST list entries newest
+- **FR-053**: `cosmion history [--limit <n>] [--model <id>] [--json]` MUST list entries newest
   first, 20 by default. JSON: `{"entries": [<entry>, …]}`.
-- **FR-054**: `oriel show <id> [--json]` MUST print the full entry, with `"exists": true|false`
+- **FR-054**: `cosmion show <id> [--json]` MUST print the full entry, with `"exists": true|false`
   added to each image.
 
 **Requests**
 
-- **FR-055**: Every request to OpenRouter MUST send `X-OpenRouter-Title: Oriel` (and
+- **FR-055**: Every request to OpenRouter MUST send `X-OpenRouter-Title: Cosmion` (and
   `HTTP-Referer` once the project has a public URL).
 - **FR-056**: OpenRouter responses MUST be validated where they enter; an unexpected shape
   (including an image item without `b64_json`) exits 7 with a message, never a crash
   trace.
 
-**Batch (1B): `oriel batch <file> --budget <usd> [options]`**
+**Batch: `cosmion batch <file> --budget <usd> [options]`**
 
 - **FR-070**: `batch` MUST read CSV (with a header row) or JSONL, chosen by the `.csv` or
   `.jsonl` extension. Each row has `prompt` (required), `model` (required unless `--model`
-  or `ORIEL_MODEL` is set), and optionally the `gen` options as columns: `aspect`, `resolution`,
+  or `COSMION_MODEL` is set), and optionally the `gen` options as columns: `aspect`, `resolution`,
   `quality`, `background`, `count`, `seed`, `format`, `compression`, `ref` (several refs
   separated by `|` in CSV, an array in JSONL) and `out`. Unknown columns exit 2.
 - **FR-071**: `--budget <usd>` MUST be required. Options `--model`, `--out <folder>`
@@ -590,7 +595,7 @@ the test suite against the shape it declares.
   stopped the batch (FR-075); otherwise 8 when any row failed or was skipped.
   Text mode: saved paths on stdout, progress on stderr.
 
-**Usage (1B): `oriel usage [--since <when>] [--until <when>] [--by model|day] [--json]`**
+**Usage: `cosmion usage [--since <when>] [--until <when>] [--by model|day] [--json]`**
 
 - **FR-080**: `usage` MUST total `cost_usd`, generations and images from the ledger over a
   period, grouped by model (default) or day. `--since`/`--until` take a date
@@ -598,7 +603,7 @@ the test suite against the shape it declares.
 - **FR-081**: Entries with `null` cost MUST be counted in `unknown_cost_count`, not as $0.
 - **FR-082**: Days are calendar days in the user's local time zone.
 
-**Regen (1B): `oriel regen <id> [--out <path>] [--force] [--json]`**
+**Regen: `cosmion regen <id> [--out <path>] [--force] [--json]`**
 
 - **FR-085**: `regen` MUST send the original entry's model, prompt, `settings` (including
   seed) and references unchanged; only the output location can be chosen (`--out`, same
@@ -607,13 +612,13 @@ the test suite against the shape it declares.
   supports the settings, local references still exist) and append a new entry with
   `regen_of`.
 
-**Models rank (1B): `oriel models rank [gen options] [--refs <n>] [--json]`**
+**Models rank: `cosmion models rank [gen options] [--refs <n>] [--json]`**
 
 - **FR-090**: `models rank` MUST list only models that support every passed option and
   value (and at least `--refs` references), sorted by the price for those options
   (FR-034) cheapest first; `at_most` and `estimate` sort by their number; `unknown` last.
 
-**Doctor (1B): `oriel doctor [--json]`**
+**Doctor: `cosmion doctor [--json]`**
 
 - **FR-095**: `doctor` MUST run these checks, each `ok`, `warn` or `fail` with a fix: Node
   version; key present and its source; key accepted by `GET /key`; key limit nearly used
@@ -623,7 +628,7 @@ the test suite against the shape it declares.
   readable (warn with the count of skipped lines).
 - **FR-096**: Exit 0 when nothing fails (warnings allowed), 8 otherwise.
 
-**Schema (1B): `oriel schema`**
+**Schema: `cosmion schema`**
 
 - **FR-098**: `schema` MUST print (always JSON) the CLI version, every command with its
   arguments and options (name, alias, type, allowed values, required, repeatable,
@@ -634,7 +639,7 @@ the test suite against the shape it declares.
 
 **Release**
 
-- **FR-060**: The package MUST be `oriel` on npm, MIT-licensed (a `LICENSE` file and the
+- **FR-060**: The package MUST be `cosmion` on npm, MIT-licensed (a `LICENSE` file and the
   `license` field), require Node 22+ (`engines`), include no native modules, and ship as a
   single package.
 - **FR-061**: The README MUST include install, a terminal example, an agent example, the
@@ -643,7 +648,7 @@ the test suite against the shape it declares.
 - **FR-062**: CI MUST run all tests on every push on Linux, macOS and Windows, and publish
   to npm on a version tag.
 - **FR-063**: CI MUST pack the CLI as npm would publish it, install it in an empty folder
-  and run `oriel --version` and `oriel models --json` (against a fake) before publishing.
+  and run `cosmion --version` and `cosmion models --json` (against a fake) before publishing.
 - **FR-064**: Tests MUST never call the real OpenRouter API or touch the user's real
   settings, ledger or cache.
 
@@ -674,7 +679,7 @@ the test suite against the shape it declares.
 
 ### Measurable Outcomes
 
-- **SC-001**: A developer with an OpenRouter key goes from `npm install -g oriel` to a saved
+- **SC-001**: A developer with an OpenRouter key goes from `npm install -g cosmion` to a saved
   image in under 2 minutes.
 - **SC-002**: In a manual check across at least 5 per-image models, every `exact` price
   equals the charged `usage.cost`, except where the catalog itself is wrong (Riverflow,
@@ -694,17 +699,17 @@ the test suite against the shape it declares.
 
 - Images arrive as base64 in `data[].b64_json` with a `media_type` (checked live across
   five providers; none returned a URL).
-- No saved default model (only `ORIEL_MODEL`), no provider pinning, no streaming, no
+- No saved default model (only `COSMION_MODEL`), no provider pinning, no streaming, no
   single-generation `--max-cost`; all can be added without breaking the interface.
 - Text output layout (tables, wording) is for humans and may change; JSON output and exit
   codes may not without the maintainer's approval (constitution V).
 - `doctor` doesn't check for newer CLI versions (no calls to npm).
-- Out of scope (`docs/ideas/`): `oriel auth login` (OAuth), OS keychain, standalone
-  download, AUR and other package managers, the weekly pricing-format CI check, `oriel tui`.
+- Out of scope (`docs/ideas/`): `cosmion auth login` (OAuth), OS keychain, standalone
+  download, AUR and other package managers, the weekly pricing-format CI check, `cosmion tui`.
 
 ## Live API checks (2026-10-17)
 
-1A's **(verify)** items had to be checked against the live API before planning. All are
+The spec's **(verify)** items had to be checked against the live API before planning. All are
 settled; details and figures in `docs/openrouter-api.md` → Charged vs listed.
 
 1. **Image format:** always base64 with `media_type`; no URLs (FR-010, FR-056).

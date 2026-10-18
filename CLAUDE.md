@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Oriel is a CLI (`oriel`) for generating images with any model on OpenRouter,
+Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
 bring-your-own-key, for developers and their agents. **No code exists yet.**
 
 **The rules live in `.specify/memory/constitution.md`**: how code is written, testing,
@@ -13,9 +13,9 @@ doesn't repeat it.
 
 Where things are:
 
-- `specs/`: what's being built. `specs/001-cli` covers the CLI's phases 1A (v0.1) and 1B
-  (v0.2+); when asked what's next, follow its phases.
-- `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Oriel
+- `specs/`: what's being built. `specs/001-cli` covers the whole CLI, shipping together as
+  v0.1; when asked what's next, follow its tasks' phases.
+- `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Cosmion
   uses, including what was checked against the live API. Check it before speccing
   anything that talks to OpenRouter.
 
