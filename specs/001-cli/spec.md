@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Draft
+**Status**: Approved by the maintainer, 2026-10-18
 
 **Input**: User description: "look at the docs (including the openrouter one) and create a spec
 to build the CLI. Follow the principles laid out in CLAUDE.md when creating it."

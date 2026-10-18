@@ -4,6 +4,8 @@
 
 **Branch**: `001-cli` | **Date**: 2026-10-18
 
+**Status**: Approved by the maintainer, 2026-10-18
+
 ## How to use this list
 
 - Format: `- [ ] T### [P] [US#] Description (file)`. `[P]` means it can run in parallel

@@ -2,6 +2,8 @@
 
 **Branch**: `001-cli` | **Date**: 2026-10-18 | **Spec**: [spec.md](spec.md)
 
+**Status**: Approved by the maintainer, 2026-10-18
+
 How the v0.1 CLI in the spec is built. The spec says *what* it does (commands, flags,
 JSON, exit codes); this says how, and why where the choice isn't obvious. OpenRouter
 details are in `docs/openrouter-api.md` and aren't repeated.
