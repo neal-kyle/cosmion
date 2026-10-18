@@ -697,7 +697,7 @@ the test suite against the shape it declares.
 - No saved default model (only `ORIEL_MODEL`), no provider pinning, no streaming, no
   single-generation `--max-cost`; all can be added without breaking the interface.
 - Text output layout (tables, wording) is for humans and may change; JSON output and exit
-  codes may not without the owner's approval (constitution V).
+  codes may not without the maintainer's approval (constitution V).
 - `doctor` doesn't check for newer CLI versions (no calls to npm).
 - Out of scope (`docs/ideas/`): `oriel auth login` (OAuth), OS keychain, standalone
   download, AUR and other package managers, the weekly pricing-format CI check, `oriel tui`.

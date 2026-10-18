@@ -43,9 +43,9 @@ Spec Kit's git extension has auto-commit turned off.
 Update `CLAUDE.md` as part of the work, without being asked, whenever something changes
 how a future session should work here, in the same commit as the change that caused it:
 commands added or changed, a convention established, a non-obvious gotcha discovered, or
-a lasting instruction from the owner. Rules belong in the constitution (with the owner's
-approval), not here.
+a lasting instruction from the maintainer. Rules belong in the constitution (with the
+maintainer's approval), not here.
 
 Keep it short: replace or remove outdated lines rather than appending, and don't
-duplicate the constitution, the docs above or the code. Mention the update to the owner
-when it happens.
+duplicate the constitution, the docs above or the code. Mention the update to the
+maintainer when it happens.

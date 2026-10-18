@@ -1,9 +1,9 @@
 # Oriel Constitution
 
 Oriel is a CLI (`oriel`) for generating images with any model on OpenRouter,
-bring-your-own-key, for developers and their agents. The owner is not a full-time
-developer and maintains Oriel alone, with an AI agent; every principle below serves
-that.
+bring-your-own-key, for developers and their agents. It is maintained by one person, not
+a full-time developer, working with an AI agent; every principle below serves that.
+These rules apply to everyone who works on Oriel, people and agents alike.
 
 ## Core Principles
 
@@ -60,7 +60,7 @@ simplest code, show it passes, then tidy up.
 
 The CLI is used by agents. `--json` on every command, data on stdout, logs on stderr,
 stable exit codes, no prompts without a TTY. Changing any of these is a breaking change
-and needs the owner's explicit approval.
+and needs the maintainer's explicit approval.
 
 ### VI. Logic apart from interface, data per product
 
@@ -86,14 +86,17 @@ about possible future work is worded as an idea, never a plan.
 
 ## Development Workflow
 
-- Every feature or meaningful behavior change goes through Spec Kit: specify → clarify
-  (when anything is ambiguous) → plan → tasks → analyze → implement. The owner approves
+- Every new feature or behavior change is specced before it's built. A new capability
+  goes through Spec Kit: specify → clarify (when anything is ambiguous) → plan → tasks →
+  analyze → implement. A small change to existing behavior instead edits the spec where
+  that behavior is described, then its plan and tasks where they're affected; clarify
+  and analyze can be skipped when there's nothing to resolve. The maintainer approves
   the spec, the plan and the tasks; no tests or code before that.
 - Specs describe behavior, not implementation, and stay short. CLI features include the
   exact commands, flags, JSON output and exit codes.
 - Tasks are grouped into phases that each leave the project working and tested.
   Implement one phase at a time, then report and wait.
-- If building reveals the spec was wrong, update the spec and tell the owner; the spec
+- If building reveals the spec was wrong, update the spec and tell the maintainer; the spec
   always matches what shipped.
 - No spec needed for bug fixes that restore specced behavior, refactors that don't
   change behavior, dependency updates, or docs. A bug fix still starts with a failing
@@ -101,7 +104,10 @@ about possible future work is worded as an idea, never a plan.
 
 ### Git
 
-- Work happens on `main` or a Spec Kit feature branch. Commit only when the owner asks.
+- Never work on `main`. Specced work happens on its Spec Kit branch (`NNN-name`);
+  anything else on a short-lived branch named for what it is (`fix/…`, `docs/…`,
+  `chore/…`). Every change reaches `main` through a pull request.
+- Commit only when the person you're working for asks.
 - One coherent change per commit (a feature, a fix, a refactor, a docs update), so each
   can be understood or reverted on its own. Don't bundle unrelated changes, and don't
   split one change into tiny commits (e.g. one per file) unless that's genuinely clearer.
@@ -112,7 +118,7 @@ about possible future work is worded as an idea, never a plan.
 ## Governance
 
 This constitution guides every Spec Kit command. Plans that add complexity beyond these
-principles must justify it in the plan. Amendments are made with the owner's approval
-and recorded by bumping the version below.
+principles must justify it in the plan. Amendments are made with the maintainer's
+approval and recorded by bumping the version below.
 
-**Version**: 1.3.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-17
+**Version**: 1.4.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-18
