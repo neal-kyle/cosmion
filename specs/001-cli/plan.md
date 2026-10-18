@@ -21,7 +21,7 @@ temporary folder.
 | | |
 |---|---|
 | **Language** | TypeScript (strict), compiled with `tsc` to ES modules in `dist/`. No bundler: the package ships `dist/` and installs its dependencies like any npm package |
-| **Runtime** | Node **22.12+** (`engines: ">=22.12.0"`). Uses built-in `fetch`, `AbortSignal.timeout`, `crypto.randomInt`, `util.styleText` |
+| **Runtime** | Node **22.12+** (`engines: ">=22.12.0"`). Uses built-in `fetch`, `AbortController`, `crypto.randomInt`, `util.styleText` |
 | **Runtime dependencies** | `commander`, `zod`, `env-paths`, `csv-parse`, `image-size` (reasons below) |
 | **Dev dependencies** | `typescript`, `vitest`, `@biomejs/biome`, `@types/node@22` (pinned to 22 so code can't use APIs newer Node versions added) |
 | **Storage** | JSON files only: settings file (key), catalog cache, ledger (JSON Lines). No database |
@@ -111,7 +111,7 @@ tests/
 ├── core/                  Unit tests: openrouter, options, pricing, money, ids,
 │                          settings-file, batch scheduler
 ├── cli/                   One file per command, plus run, agent-interface, ledger,
-│                          out-paths, refs, batch-file
+│                          out-paths, refs, batch-file, paths, format-usd
 ├── boundary.test.ts       core/cli import rule
 ├── skill-md.test.ts       SKILL.md mentions every command, option and exit code
 └── concurrency.test.ts    20 real processes appending to one ledger (SC-006)
@@ -140,6 +140,10 @@ export const price = defineCommand({
 
 - `run.ts` turns the list into a commander program, adds `--json` to every command, and
   converts option values by their declared type (an integer that isn't one exits 2).
+- A definition can have `subcommands`, each a definition of its own. A parent can also
+  have its own `run` and arguments: `auth` saves a key while `auth status` and
+  `auth logout` are its children, and `models [id]` lists or shows while `models rank` is
+  its child (model ids contain a `/`, so none is mistaken for `rank`).
 - `schema` walks the same list: options straight from the definitions, outputs via
   `z.toJSONSchema()`, exit codes from `exit-codes.ts`. It always prints JSON.
 - The test helper validates every `--json` result against its command's `output` schema
@@ -155,10 +159,11 @@ export const price = defineCommand({
   a spinner on stderr; the spinner and colors appear only when stderr is a TTY and
   `NO_COLOR` is unset.
 - `core` throws `CosmionError` with a code from FR-040 (`usage`, `auth`, `credits`,
-  `not_found`, `rate_limited`, `upstream`, `partial`); `run.ts` maps it through
+  `not_found`, `rate_limited`, `upstream`) and its `retryable` flag (the timeout is the
+  one `upstream` error that isn't retryable); `run.ts` maps it through
   `exit-codes.ts` and prints `{"error": {"code", "message", "retryable"}}`. Anything else
   thrown is `internal`, exit 1, with a one-line message (stack trace only with
-  `COSMION_DEBUG=1`, on stderr).
+  `COSMION_DEBUG=1`, on stderr; FR-059).
 - HTTP status mapping lives in `openrouter.ts` (the table in `docs/openrouter-api.md`);
   a `fetch` that throws (offline, DNS) is `upstream`, retryable. For 402 the message
   names `metadata.limit_source` and the credits link (FR-040a).
@@ -204,7 +209,8 @@ of a dollar. The ledger and JSON keep plain USD numbers.
 - **Same settings**, used for estimates and for batch groups: the sent `settings` minus
   `seed`, plus the number of references, as a canonical key (sorted JSON). The ledger
   stores `settings` with API field names, so a new request and an old entry compare
-  directly.
+  directly. The `output_format` implied by `--out` is part of the sent settings, so
+  `price` matches such an entry only with the same `--format`; `SKILL.md` says so.
 
 ### Pricing (FR-030–FR-037)
 
@@ -212,8 +218,10 @@ of a dollar. The ledger and JSON keep plain USD numbers.
 `{ usage, cost_usd } | null`, found by the CLI in the ledger (newest entry with the same
 model and same settings). For each endpoint it picks the output line (FR-032), adds
 reference lines (FR-033), applies the unit rules (`image` exact, `token` and `megapixel`
-from `lastMatch`, unknown unit → unknown), multiplies per-image lines by `n`, then
-combines endpoints: equal → that kind, different → `at_most` with the highest. Every
+from `lastMatch`, unknown unit → unknown), multiplies per-image catalog lines by `n`
+(never an estimate: `lastMatch` had the same `n` and its cost already covers the whole
+request), then combines endpoints: equal → that kind, different → `at_most` with the
+highest. `models` prices each model this way with no options. Every
 case in Story 4 and every pricing case in `docs/openrouter-api.md` → Charged vs listed
 gets a fixture model and a test.
 
@@ -226,19 +234,21 @@ subtotal of the known rows and how many are unknown.
 
 `generate.ts` has two steps, so `batch` can check every row before spending anything:
 
-1. **Prepare** (no network except a possible catalog refresh): pick the ledger id, find
-   the model, validate options, add a random seed, read refs into data URLs, add the
-   `output_format` implied by `--out` (FR-009), resolve output paths and check them
+1. **Prepare** (no network except a possible catalog refresh, no writes): pick the ledger
+   id, find the model, validate options, add a random seed, read refs into data URLs, add
+   the `output_format` implied by `--out` (FR-009), resolve output paths and check them
    (FR-012). Returns a ready request.
-2. **Execute**: `POST /images` with a 5-minute timeout, decode each `b64_json`, write each
-   file, append one ledger entry, return it.
+2. **Execute**: create missing parent folders, `POST /images` with a 5-minute timeout,
+   decode each `b64_json`, write each file, append one ledger entry, return it.
 
 Details:
 
 - **Output paths:** the id is generated before the request, so default names
   (`cosmion-<id>.<ext>`) are known except for the extension, which comes from `media_type`.
   The pre-check refuses if `cosmion-<id>` already exists with any of the four extensions.
-  Missing parent folders are created during Prepare (an empty folder left by a failed
+  For a folder that doesn't exist yet, it checks that the nearest existing folder above it
+  is writable; the missing folders are created in Execute, so `price`, a `batch --dry-run`
+  or a batch refused for a bad row leaves nothing behind (an empty folder left by a failed
   request is harmless). `--out hero` with no extension writes `hero` exactly, as FR-008
   says. A trailing `/` or `\` (Windows) marks a folder.
 - **No overwrite race:** files are written with the exclusive-create flag (`wx`) unless
@@ -257,6 +267,11 @@ Details:
 - **Ctrl-C:** `main.ts` turns SIGINT into an `AbortSignal` in the context. An aborted
   generation writes no ledger entry and prints the "may still have been charged" message.
   It exits 130 (FR-040).
+- **Timeout:** an `AbortController` aborted by a plain `setTimeout` (not
+  `AbortSignal.timeout`, which Vitest's fake timers don't control), combined with the
+  context's signal. The abort reason tells them apart: a timeout is `upstream`,
+  `retryable: false`, exit 7, with the same "may still have been charged" message
+  (FR-017); Ctrl-C exits 130.
 
 ### Ledger (FR-050–FR-054)
 
@@ -281,8 +296,9 @@ Details:
 - Key resolution: `OPENROUTER_API_KEY`, else the file. `auth` warns when the env var is set.
 - Hidden input: raw-mode stdin on a TTY, no echo, Enter to finish, Backspace and Ctrl-C
   handled. Without a TTY and without `--stdin`, exit 2 before reading anything.
-- `auth status` with a rejected key reports `valid: false` and exits 0: the command
-  itself worked. A network failure exits 7.
+- `auth status` with a rejected key reports `valid: false`, and with no key
+  `source: "none"`; both exit 0, since the command itself worked. A network failure exits
+  7 (FR-048).
 
 ### Batch (FR-070–FR-078)
 
@@ -292,12 +308,12 @@ Split into the pure money logic and the CLI around it:
   into rows; unknown columns, a missing `prompt`, or a bad value are reported with the
   row number.
 - `batch.ts` (command): resolves each row with `--model`/`COSMION_MODEL` as default, runs
-  **Prepare** on every row that will run, and exits 2 listing every bad row. It also
-  refuses two rows writing the same path. Each row is priced as `price` would.
+  **Prepare** on every row that will run, and exits 2 listing every bad row, including
+  two rows writing the same path (FR-072). Each row is priced as `price` would.
 - **`--budget` and `--no-budget` are two separate options** in the command definition.
   Commander would otherwise read `--no-budget` as "turn `--budget` off" and let the last
   one win, so the command checks that exactly one was given and that the budget is a
-  number above 0 (FR-071).
+  number above 0 (FR-071). With `--dry-run` neither is required and both are ignored.
 - The report's `stopped` is `null`, or `{ code, message }` when a `credits`/`auth` error
   or an unknown cost (`unknown_cost`) stopped new rows; the same message goes to stderr.
 - `core/batch.ts` (scheduler): given rows with prices, a budget, what's already spent, a
@@ -308,7 +324,10 @@ Split into the pure money logic and the CLI around it:
     `skipped_budget`, move on to the next row.
   - An `unknown`-price row waits until nothing is running, then starts alone if
     spent < budget. When it finishes, its actual cost becomes the price of the remaining
-    rows in its group (same model and same settings).
+    rows in its group (same model and same settings, so the same count: a price per row).
+  - Any finished row whose actual cost is higher than its group's price raises that
+    price to the actual cost (the catalog can list less than is charged). Prices are
+    never lowered.
   - Spending is the sum of finished rows' actual costs. A `credits` or `auth` error stops
     new rows; running ones finish; the rest are `not_run`.
   - A finished row with no `usage.cost` counts its price if it had one; if not, no new
@@ -319,7 +338,8 @@ Split into the pure money logic and the CLI around it:
 - **Resume** (FR-076): a row is done if the ledger has an entry for that `batch_id` and
   `row` **with at least one saved image** (so a paid-but-not-saved row is retried). Done
   rows are `skipped_resumed` and not validated again (their output files now exist).
-  Every earlier entry of the batch, done or not, counts toward spending. An earlier entry
+  Every earlier entry of the batch, done or not, counts toward spending, and its actual
+  cost sets its group's price as above. An earlier entry
   with no cost counts its row's price; if that's unknown and `--budget` is given, exit 2
   pointing to `--no-budget` (FR-073a).
 - `--no-budget` prints its warning on stderr before any row starts.
@@ -339,7 +359,8 @@ Split into the pure money logic and the CLI around it:
 
 Each check is a small function returning `{ name, status, message, fix }`, run in order.
 Network checks share one `GET /key`. The permission check is skipped (`ok`, "not checked
-on Windows") on Windows.
+on Windows") on Windows. The Node version and platform come from the context, so tests
+can check an old Node and the Windows branch on any machine.
 
 ### Paths and test hooks
 
@@ -364,7 +385,8 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
 - **Testing seams** (the only things passed in, constitution II): every command gets a
   `Context`: `env`, `cwd`, `stdin`/`stdout`/`stderr` (with their TTY flags), `fetch`, the
   OpenRouter base URL (from `COSMION_TEST_OPENROUTER_URL` in `main.ts`, otherwise the real
-  one) and an `AbortSignal`. Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
+  one), an `AbortSignal`, and `platform` and `nodeVersion` (for `doctor` and the
+  permission checks). Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
   settings file are swapped by pointing at a temp folder. `cwd` is in the context because
   tests can't safely change the process's folder.
 - **`runCli(args, options)`** creates a temp `COSMION_HOME` and cwd, runs the command
@@ -451,4 +473,7 @@ same reason, but is also an ordinary feature.)
 None. The four found while planning were decided on 2026-10-18 and are in the spec's
 clarifications: a batch row with no `usage.cost` and `--no-budget` (FR-071, FR-073a);
 Ctrl-C exits 130 (FR-040); `COSMION_HOME` documented and the test-only
-`COSMION_TEST_OPENROUTER_URL` (FR-057, FR-058); Node 22.12+ (FR-060).
+`COSMION_TEST_OPENROUTER_URL` (FR-057, FR-058); Node 22.12+ (FR-060). The five raised
+by `/speckit-analyze` the same day are there too: batch prices raised by actual costs and
+the one-row bound (FR-073, SC-008), the timeout not retryable (FR-017), no `partial`
+error code (FR-040), and `--dry-run` without a budget (FR-071).

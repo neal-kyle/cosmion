@@ -45,6 +45,11 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 - Q: What exit code does Ctrl-C give? → A: 130, the shell convention for an interrupted program, with nothing on stdout.
 - Q: What about the environment variables the tests need? → A: `COSMION_HOME` is a real, documented feature (keep all files in one folder). The OpenRouter address override is test-only: named `COSMION_TEST_OPENROUTER_URL`, undocumented for users, not part of the stable interface.
 - Q: Node 22+ or 22.12+? → A: 22.12+, which current `commander` and `vitest` need.
+- Q: The catalog can list a price lower than what's charged (Riverflow), so a budgeted batch could overspend by more than one image. What then? → A: When a row finishes, its actual cost becomes the price of the remaining rows with the same model and settings whenever it's higher than the price they had (FR-073).
+- Q: The first row of an unknown-priced group can ask for several images. Is the bound "one image" or "one row"? → A: One row (FR-073, SC-008). This replaces "at most one image" in the 2026-10-17 answer above.
+- Q: Should a timeout say `retryable: true` when the provider may already have charged? → A: No. Cosmion's own 5-minute timeout is `retryable: false`; the message says to check openrouter.ai activity first (FR-017, FR-040).
+- Q: `partial` is listed as an `error.code`, but exit 8 never prints an error. Keep it? → A: No, removed; exit 8 is unchanged (FR-040).
+- Q: Does `batch --dry-run` need `--budget` or `--no-budget`? → A: No; it spends nothing (FR-071).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -356,7 +361,7 @@ the test suite against the shape it declares.
   and the JSON shows how many.
 - **Generation times out or is interrupted (Ctrl-C):** no ledger entry; the message says
   the provider may still have charged and to check openrouter.ai activity. Ctrl-C exits
-  130; a timeout exits 7.
+  130; a timeout exits 7 with `"retryable": false`, since retrying could pay twice.
 - **Cut-off last ledger line** (crash mid-write): skipped when reading, with a warning on
   stderr; other entries are unaffected.
 - **Ledger entry from a newer CLI** (unknown format version): skipped with a warning.
@@ -380,7 +385,7 @@ the test suite against the shape it declares.
 - **Batch row fails with a retryable error:** that row is marked `failed`; the batch goes on.
 - **`regen` of an entry whose model was removed:** exits 5.
 - **`regen` of an entry without a seed** (its model has no `seed` option): re-runs with
-  the same settings; the output notes the result won't be identical.
+  the same settings; a warning on stderr says the result won't be identical.
 
 ## Requirements *(mandatory)*
 
@@ -414,7 +419,8 @@ the test suite against the shape it declares.
 - **FR-008**: `--out <path>` MUST be treated as a folder if it is an existing folder or
   ends with a path separator (default names inside it), otherwise as a file path written
   exactly; with several images a file path becomes `<stem>-<k><ext>`. Missing parent
-  folders are created.
+  folders are created just before the images are written, never by a command that sends
+  nothing.
 - **FR-009**: When `--out` has an image extension, `--format` isn't given and the model
   supports `output_format` with that value, the CLI MUST request that format.
 - **FR-010**: The saved file's extension, when the CLI picks the name, MUST match the
@@ -433,12 +439,15 @@ the test suite against the shape it declares.
   `--json` prints the ledger entry (FR-050) as the result.
 - **FR-016**: `gen` MUST NOT retry a failed generation automatically (a retry could be
   charged twice).
-- **FR-017**: The generation request MUST time out after 5 minutes (exit 7).
+- **FR-017**: The generation request MUST time out after 5 minutes: exit 7 with
+  `"retryable": false`, because the provider may already have charged; the message says to
+  check openrouter.ai activity before trying again.
 
 **Models: `cosmion models [<id>] [--refresh] [--json]`**
 
 - **FR-020**: `models` MUST list every image model: id, name, whether it accepts reference
-  images (and how many), its options, and a one-line price summary (FR-034 kinds).
+  images (and how many), its options, and a one-line price summary (FR-034 kinds): the
+  price `cosmion price -m <id>` would show with no options.
 - **FR-021**: `models <id>` MUST show one model in full: its options with allowed values,
   and per provider its name, `supported_parameters` and pricing lines.
 - **FR-022**: The catalog (models plus their endpoint records) MUST be cached and refreshed
@@ -465,7 +474,10 @@ the test suite against the shape it declares.
   - `exact`: per-image price fully determined;
   - `at_most`: a ceiling (several providers at different prices, or FR-032 ambiguity);
   - `estimate`: from the newest ledger entry with the same model and the same settings
-    (all options except prompt and seed, including the number of refs). Per-token models:
+    (all options sent except prompt and seed, including the number of refs and an
+    `output_format` implied by `--out` under FR-009, so `price --format png` matches
+    `gen --out x.png`). The estimate is for the whole request, like that entry, and is
+    never multiplied by `--count` again (the count is part of the settings). Per-token models:
     its `prompt_tokens` × the highest current input per-token price + `completion_tokens`
     × the current output per-token price. Per-megapixel models: its actual `cost_usd`
     (billing isn't linear in megapixels). Per-image models whose computed price differs
@@ -473,7 +485,8 @@ the test suite against the shape it declares.
     giving both;
   - `unknown`: no matching history for those models, no pricing listed, or a `unit` Cosmion
     doesn't recognize. Never guessed.
-- **FR-035**: Per-image prices MUST be multiplied by `--count` (default 1).
+- **FR-035**: Per-image prices from the catalog MUST be multiplied by `--count` (default 1).
+  Estimates (FR-034) aren't.
 - **FR-036**: Any part of the cost the CLI can't compute (e.g. a pricing line whose
   `billable` it doesn't recognize) MUST be listed in `notes` and makes the kind no better
   than `estimate`.
@@ -495,8 +508,8 @@ the test suite against the shape it declares.
   | 4 | Insufficient credits or key limit reached (402) | `credits` | no |
   | 5 | Unknown model or ledger id (incl. OpenRouter 404) | `not_found` | no |
   | 6 | Rate limited (429) | `rate_limited` | yes |
-  | 7 | OpenRouter, provider or network failure, or timeout (5xx, 524) | `upstream` | yes |
-  | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks) | `partial` | depends |
+  | 7 | OpenRouter, provider or network failure, or timeout (5xx, 524) | `upstream` | yes, except Cosmion's own 5-minute timeout (FR-017) |
+  | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks); not an error (FR-041) | | |
   | 130 | Interrupted (Ctrl-C); nothing on stdout, even with `--json` | | |
 
 - **FR-040a**: For exit 4, the message MUST say whether the account's credits or the key's
@@ -532,8 +545,10 @@ the test suite against the shape it declares.
   on macOS and Linux; on Windows the file sits in the user's own profile folder).
 - **FR-048**: `cosmion auth status` MUST report the source (`env`, `file` or `none`) and,
   when a key exists, its validity, label, limit, limit remaining and usage from `GET /key`,
-  and the account balance from `GET /credits` (`null` if that call is refused).
-  `cosmion auth logout` removes the saved key.
+  and the account balance from `GET /credits` (`null` if that call is refused). It reports
+  and exits 0 whether the key is valid, rejected (`"valid": false`) or missing
+  (`"source": "none"`, the other fields `null`); only a network failure is an error
+  (exit 7). `cosmion auth logout` removes the saved key.
 - **FR-049**: The key MUST never appear in stdout, stderr, the ledger or the cache.
 
 **Ledger: history and show**
@@ -593,6 +608,8 @@ the test suite against the shape it declares.
 - **FR-058**: `COSMION_TEST_OPENROUTER_URL` replaces the OpenRouter address, so tests that
   run the real program can use a fake. It exists for the test suite only: it isn't in
   the README or `SKILL.md` and isn't part of the stable interface.
+- **FR-059**: `COSMION_DEBUG=1` MUST add the stack trace of an unexpected error (exit 1) to
+  stderr, for bug reports. The README documents it.
 
 **Batch: `cosmion batch <file> (--budget <usd> | --no-budget) [options]`**
 
@@ -602,22 +619,28 @@ the test suite against the shape it declares.
   `quality`, `background`, `count`, `seed`, `format`, `compression`, `ref` (several refs
   separated by `|` in CSV, an array in JSONL) and `out`. Unknown columns exit 2.
 - **FR-071**: Exactly one of `--budget <usd>` or `--no-budget` MUST be passed; neither or
-  both exits 2, as does a budget that isn't a number greater than 0. `--no-budget` MUST print a warning on stderr that the batch's only cap is
+  both exits 2, as does a budget that isn't a number greater than 0. With `--dry-run`
+  neither is needed (nothing is spent) and one given is ignored. `--no-budget` MUST print a warning on stderr that the batch's only cap is
   the key's spending limit on OpenRouter, and its help text says agents use it only when
   the user asks. Options `--model`, `--out <folder>`
   (default for rows without `out`), `--concurrency <1-8>` (default 2), `--force`,
   `--dry-run`, `--resume <batch-id>` and `--json` are supported.
 - **FR-072**: Every row that will run (all of them, except rows `--resume` skips) MUST be
-  validated as `gen` validates (FR-012) before anything is spent; any invalid row exits 2 with every bad row's number and reason.
+  validated as `gen` validates (FR-012) before anything is spent, and no two rows may write
+  the same path; any invalid row exits 2 with every bad row's number and reason.
 - **FR-073**: The budget is a per-run guard (the key's OpenRouter limit is the hard
   stop). A row with a known price (`exact`, `at_most`, `estimate`) starts only if that
   price fits in the budget minus what the batch has spent and the prices of rows still
   running. A row with an `unknown` price starts only when no other row is running and the
-  budget has room left; once it finishes, its actual cost (per image) is the price of the
-  remaining rows with the same model and settings. So the batch can go over the budget by
-  at most one unknown-priced image. Rows that never fit are `skipped_budget`. Spending is
-  tracked from each finished row's actual `usage.cost`. With `--no-budget`, rows start as
-  concurrency allows, whatever their price.
+  budget has room left; once it finishes, its actual cost is the price of the remaining
+  rows with the same model and settings (the same settings include the count, so it's a
+  price per row). Because the catalog can list less than is charged (Riverflow), the same
+  applies to known prices: a finished row whose actual cost is higher than its price
+  raises the price of the remaining rows in its group to that cost. Rows that never fit are
+  `skipped_budget`. Spending is tracked from each finished row's actual `usage.cost`.
+  So the batch can go over the budget only by one unknown-priced row, or, when the catalog
+  underprices a model, by the shortfall on that group's rows that had already started
+  before its first dearer row finished. With `--no-budget`, rows start as concurrency allows, whatever their price.
 - **FR-073a**: With `--budget`, a finished row whose response has no `usage.cost` MUST
   count its price as spent if that price was known. If it wasn't, the budget can no
   longer be tracked: no further rows start, the rest are `not_run`, and the message gives
@@ -632,8 +655,10 @@ the test suite against the shape it declares.
   batch continues; a `credits` or `auth` error stops new rows from starting (FR-040 code
   of that error), and the report's `stopped` holds that error's `code` and `message`. Rows are never retried automatically.
 - **FR-076**: `--resume <batch-id>` MUST skip rows that have a ledger entry for that batch
-  and row, and count that batch's earlier spending against `--budget`. The file is
-  expected to be the same; rows are matched by number.
+  and row with at least one saved image; a row that was paid for but not saved runs
+  again. All of that batch's earlier spending counts against `--budget`, and earlier
+  actual costs set their groups' prices as in FR-073. The file is expected to be the
+  same; rows are matched by number.
 - **FR-077**: `--dry-run` MUST validate, print each row's price and the total, and spend
   nothing.
 - **FR-078**: Exit 0 when every row succeeded; 3 or 4 when an auth or credits error
@@ -737,9 +762,10 @@ the test suite against the shape it declares.
 - **SC-006**: 20 concurrent `gen` runs against a fake produce 20 complete ledger lines.
 - **SC-007**: An agent given only `SKILL.md` and `--help` can generate an image to a given
   path and report its cost without human help.
-- **SC-008**: In tests against a fake with fixed prices, no batch run with `--budget`
-  spends more than its budget when every price is known, and never more than the budget plus one image when some
-  are unknown.
+- **SC-008**: In tests against a fake, no batch run with `--budget` spends more than its
+  budget when every price is known and charged as listed; never more than the budget plus
+  one row when some are unknown; and when the fake charges more than the listed price, rows
+  started after the first such row finishes are priced at the actual cost.
 
 ## Assumptions
 
