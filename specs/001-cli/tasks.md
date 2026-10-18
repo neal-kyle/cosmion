@@ -35,14 +35,14 @@
 operating systems.
 
 - [x] T001 Update the spec and plan with the maintainer's answers to the plan's four open questions (done 2026-10-18: `--no-budget` and FR-073a, exit 130, FR-057 `COSMION_HOME` and FR-058 `COSMION_TEST_OPENROUTER_URL`, Node 22.12+)
-- [ ] T002 Create `package.json`: `name: "cosmion"`, `type: "module"`, `bin` for `cosmion` and `csn` → `dist/cli/main.js`, `files: ["dist", "SKILL.md"]`, `license: "MIT"`, `engines.node: ">=22.12.0"`; scripts `build`, `test`, `lint`, `format`; runtime deps `commander`, `zod` (v4), `env-paths`, `csv-parse`, `image-size`; dev deps `typescript`, `vitest`, `@biomejs/biome`, `@types/node@22`
-- [ ] T003 [P] Create `tsconfig.json`: strict, ES modules (`NodeNext`), `rootDir: src`, `outDir: dist`; and `.gitignore` (`node_modules/`, `dist/`)
-- [ ] T004 [P] Create `biome.json` (lint + format); `npm run lint` runs Biome's check and `tsc --noEmit`
-- [ ] T005 [P] Create `vitest.config.ts` that sets `COSMION_HOME` to a fresh temp folder for the whole run, so nothing can reach the user's real folders, and a setup file `tests/helpers/setup.ts` that replaces the global `fetch` with one that throws, so no test can reach the network (SC-004, FR-064)
-- [ ] T006 Write `tests/boundary.test.ts`: reads every file under `src/core` and fails on an import from `../cli`, `console.`, `process.exit`, `process.stdout` or `process.stderr` (constitution VI). Show it fails with a temporary violating file in `src/core`, then remove that file
-- [ ] T007 [P] Create `src/cli/name.ts`: the tool's name once (folder name `cosmion-cli`, env prefix `COSMION_`, file prefix `cosmion`, title `Cosmion`)
-- [ ] T008 Create `.github/workflows/ci.yml`: on every push, Ubuntu, macOS and Windows with Node 22: `npm ci`, lint, test, build (FR-062; pack-check and publishing come in Phase 11)
-- [ ] T009 Add the build, lint, test, format and run commands from the plan to `CLAUDE.md`
+- [x] T002 Create `package.json`: `name: "cosmion"`, `type: "module"`, `bin` for `cosmion` and `csn` → `dist/cli/main.js`, `files: ["dist", "SKILL.md"]`, `license: "MIT"`, `engines.node: ">=22.12.0"`; scripts `build`, `test`, `lint`, `format`; runtime deps `commander`, `zod` (v4), `env-paths`, `csv-parse`, `image-size`; dev deps `typescript`, `vitest`, `@biomejs/biome`, `@types/node@22`
+- [x] T003 [P] Create `tsconfig.json` (strict, ES modules via `NodeNext`, type-checks source and tests, no output) and `tsconfig.build.json` (`rootDir: src`, `outDir: dist`); `.gitignore` (`node_modules/`, `dist/`); `.gitattributes` forcing LF so Biome's format check passes on Windows
+- [x] T004 [P] Create `biome.json` (lint + format); `npm run lint` runs Biome's check and `tsc --noEmit`
+- [x] T005 [P] Create `vitest.config.ts` that sets `COSMION_HOME` to a fresh temp folder for the whole run, so nothing can reach the user's real folders, and a setup file `tests/helpers/setup.ts` that replaces the global `fetch` with one that throws, so no test can reach the network (SC-004, FR-064)
+- [x] T006 Write `tests/boundary.test.ts`: reads every file under `src/core` and fails on an import from `../cli`, `console.`, `process.exit`, `process.stdout` or `process.stderr` (constitution VI). Show it fails with a temporary violating file in `src/core`, then remove that file
+- [x] T007 [P] Create `src/cli/name.ts`: the tool's name once (folder name `cosmion-cli`, env prefix `COSMION_`, file prefix `cosmion`, title `Cosmion`)
+- [x] T008 Create `.github/workflows/ci.yml`: on every push, Ubuntu, macOS and Windows with Node 22: `npm ci`, lint, test, build (FR-062; pack-check and publishing come in Phase 11)
+- [x] T009 Add the build, lint, test, format and run commands from the plan to `CLAUDE.md`
 
 **Checkpoint**: `npm run lint`, `npm test`, `npm run build` pass locally; CI is green on all three systems.
 
@@ -278,14 +278,14 @@ from.
 
 - [ ] T093 [P] [US6] Add `LICENSE` (MIT, Kyle Neal, 2026) (FR-060)
 - [ ] T094 [US6] Write `SKILL.md`: every command, option, JSON output shape and exit code, `csn` as the short form, `COSMION_MODEL`, `COSMION_HOME` (FR-057; not `COSMION_TEST_OPENROUTER_URL`, FR-058), and the agent rule for `batch`: always pass `--budget`, use `--no-budget` only when the user asks, and suggest it to the user rather than using it when a batch stops on an unknown cost; after a timeout, check openrouter.ai activity before trying again (FR-017); estimates match only the same settings, including the `--format` that `--out` implies (FR-034) (FR-044a, FR-045)
-- [ ] T095 [P] [US6] Write `README.md`: install, a terminal example, an agent example, `csn`, the privacy sentence, the tip to set a spending limit on the key, `COSMION_HOME` and `COSMION_DEBUG` (FR-057, FR-059, FR-061)
+- [ ] T095 [P] [US6] Write `README.md`: install, a terminal example, an agent example, `csn`, the privacy sentence, the tip to set a spending limit on the key, `COSMION_HOME` and `COSMION_DEBUG` (FR-057, FR-059, FR-061). Its first line says what Cosmion does in search-friendly words (e.g. "generate images with any OpenRouter model from your terminal or your agent"), and `package.json` gets matching `keywords` (`openrouter`, `image-generation`, `cli`, `ai`, `agents`), since npm search reads them
 - [ ] T096 [US6] Create `scripts/pack-check.mjs` and the `pack-check` script: `npm pack`, install the tarball in an empty temp folder, check both `cosmion` and `csn` exist, that the installed `package.json` has `engines.node: ">=22.12.0"` (Story 6.2) and that the install contains no `.node` files or install scripts (FR-060), run `cosmion --version` and `cosmion models --json` against the fake server via `COSMION_TEST_OPENROUTER_URL` with a temp `COSMION_HOME` (FR-063, Story 6.1). The fake is TypeScript; if a `.mjs` script can't start it simply, run the check as a Vitest file excluded from `npm test` instead and update the plan
 - [ ] T097 [US6] Extend `.github/workflows/ci.yml`: pack-check on all three systems; on a `v*` tag, after all pass, `npm publish --provenance` with npm trusted publishing (FR-062)
 - [ ] T098 [US6] Update `CLAUDE.md`'s project state (code now exists) and anything else a future session needs
 
 **Manual checks by the maintainer** (they need real money, a real key or a fresh machine)
 
-- [ ] T099 Set up npm trusted publishing for `cosmion` on npmjs.com
+- [ ] T099 Set up npm trusted publishing for `cosmion` on npmjs.com, and give the GitHub repo the same description as the README's first line and topics such as `openrouter`, `image-generation`, `cli` and `ai-agents`
 - [ ] T100 SC-002: generate with at least 5 per-image models and check every `exact` price equals the charged `usage.cost` (Riverflow excepted; after one generation `price` shows its last actual cost)
 - [ ] T101 SC-001: from `npm install -g cosmion` to a saved image in under 2 minutes
 - [ ] T102 SC-007: an agent given only `SKILL.md` and `--help` generates an image to a given path and reports its cost

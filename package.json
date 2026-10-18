@@ -1,0 +1,38 @@
+{
+  "name": "cosmion",
+  "version": "0.1.0",
+  "description": "Generate images with any model on OpenRouter, bring your own key. For developers and their agents.",
+  "license": "MIT",
+  "author": "Kyle Neal",
+  "type": "module",
+  "bin": {
+    "cosmion": "dist/cli/main.js",
+    "csn": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "biome check . && tsc --noEmit",
+    "format": "biome format --write ."
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "csv-parse": "^7.0.3",
+    "env-paths": "^4.0.0",
+    "image-size": "^2.0.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

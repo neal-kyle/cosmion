@@ -118,7 +118,8 @@ tests/
 ├── skill-md.test.ts       SKILL.md mentions every command, option and exit code
 └── concurrency.test.ts    20 real processes appending to one ledger (SC-006)
 scripts/pack-check.mjs     npm pack → install in empty folder → run against the fake
-SKILL.md  README.md  LICENSE  package.json  tsconfig.json  biome.json  vitest.config.ts
+SKILL.md  README.md  LICENSE  package.json  tsconfig.json  tsconfig.build.json
+biome.json  vitest.config.ts  .gitattributes
 .github/workflows/ci.yml
 ```
 
@@ -417,7 +418,7 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
 
 | Command | Does |
 |---------|------|
-| `npm run build` | `tsc` → `dist/` |
+| `npm run build` | `tsc -p tsconfig.build.json` → `dist/` (`tsconfig.json` type-checks source and tests for lint) |
 | `npm test` | Builds first (`pretest`, because the concurrency test runs `dist/`), then Vitest (all tests) |
 | `npm run lint` | Biome lint + format check, and `tsc --noEmit` |
 | `npm run format` | Biome formats the code |

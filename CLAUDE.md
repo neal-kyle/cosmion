@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project state
 
 Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
-bring-your-own-key, for developers and their agents. **No code exists yet.**
+bring-your-own-key, for developers and their agents. It's being built phase by phase from
+`specs/001-cli/tasks.md`; the boxes ticked there are what exists.
 
 **The rules live in `.specify/memory/constitution.md`**: how code is written, testing,
 the agent interface, the feature workflow and git. Read it before any work; this file
@@ -19,9 +20,17 @@ Where things are:
   uses, including what was checked against the live API. Check it before speccing
   anything that talks to OpenRouter.
 
-Once the project is scaffolded, add the build, lint, test and run commands here.
-
 ## Commands
+
+| Command | Does |
+|---------|------|
+| `npm run build` | `tsc` → `dist/` (`tsconfig.build.json`, `src/` only) |
+| `npm test` | Vitest, all tests |
+| `npm run lint` | Biome check, then `tsc --noEmit` over source and tests (`tsconfig.json`) |
+| `npm run format` | Biome formats the code |
+| `node dist/cli/main.js …` | Run the built CLI (or `npm link` once, then `cosmion …`) |
+
+Each phase ends with lint, test and build passing.
 
 Features go through **Spec Kit** (lean preset):
 
