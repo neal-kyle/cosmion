@@ -39,7 +39,12 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 ### Session 2026-10-18
 
 - Q: Should 1A (v0.1) and 1B (v0.2 onward) stay separate releases? → A: No. All twelve stories ship together as v0.1; tasks still build them in phases.
-- Q: What is the tool called? → A: Cosmion (renamed from Oriel, which had trademark and naming conflicts). The package is `cosmion`; it installs two commands, `cosmion` and the short `csm`. Docs and help use `cosmion`.
+- Q: What is the tool called? → A: Cosmion (renamed from Oriel, which had trademark and naming conflicts). The package is `cosmion`; it installs two commands, `cosmion` and the short `csn`. Docs and help use `cosmion`.
+- Q: What happens when a batch image comes back without its cost, and can a batch run without a budget? → A: With `--budget`, Cosmion stops starting rows once it can't tell what's been spent; it never quietly stops counting. `--no-budget` is the only way past the cap: it must be passed explicitly, always prints a warning, and agents use it only when the user asks.
+- Q: Should the short command be `csm` or `csn`? → A: `csn`.
+- Q: What exit code does Ctrl-C give? → A: 130, the shell convention for an interrupted program, with nothing on stdout.
+- Q: What about the environment variables the tests need? → A: `COSMION_HOME` is a real, documented feature (keep all files in one folder). The OpenRouter address override is test-only: named `COSMION_TEST_OPENROUTER_URL`, undocumented for users, not part of the stable interface.
+- Q: Node 22+ or 22.12+? → A: 22.12+, which current `commander` and `vitest` need.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -92,8 +97,8 @@ OpenRouter; parse stdout as JSON and check exit codes for each success and failu
 
 1. **Given** any command with `--json`, **When** it succeeds, **Then** stdout is exactly
    one JSON object and nothing else; progress and warnings go to stderr.
-2. **Given** any command with `--json`, **When** it fails, **Then** stdout is one JSON
-   error object and the exit code matches the table in FR-040.
+2. **Given** any command with `--json`, **When** it fails (other than by Ctrl-C), **Then**
+   stdout is one JSON error object and the exit code matches the table in FR-040.
 3. **Given** stdin is not a TTY, **When** a command would need interactive input,
    **Then** it exits 2 immediately with a message saying what to pass instead.
 4. **Given** a rate-limit or server error, **When** reported, **Then** the error says
@@ -186,7 +191,7 @@ by Story 1.
 
 ### User Story 6 - Install from npm (Priority: P3)
 
-A developer installs with `npm install -g cosmion` on Node 22+ and it works on macOS,
+A developer installs with `npm install -g cosmion` on Node 22.12+ and it works on macOS,
 Windows and Linux with no build step (CI runs the tests on all three).
 
 **Why this priority**: Required to ship, but has no behavior of its own.
@@ -195,9 +200,9 @@ Windows and Linux with no build step (CI runs the tests on all three).
 
 **Acceptance Scenarios**:
 
-1. **Given** Node 22+, **When** I install the packed tarball into an empty folder,
+1. **Given** Node 22.12+, **When** I install the packed tarball into an empty folder,
    **Then** `cosmion --version` and `cosmion --help` work.
-2. **Given** Node older than 22, **When** I install, **Then** npm reports the engine
+2. **Given** Node older than 22.12, **When** I install, **Then** npm reports the engine
    requirement.
 
 ---
@@ -207,7 +212,8 @@ Windows and Linux with no build step (CI runs the tests on all three).
 A developer or agent hands Cosmion a CSV or JSONL file of prompts and a dollar budget for
 that run; Cosmion stops starting rows once the budget is used, and can pick up where it left
 off after a failure. The key's own spending limit on OpenRouter stays the hard stop; the
-budget limits one run without touching it.
+budget limits one run without touching it. Running without a budget takes an explicit
+`--no-budget`.
 
 **Why this priority**: The biggest feature after `gen`, and the one where a bug costs real money.
 
@@ -230,6 +236,16 @@ prices; check files, ledger entries, the report and that spending stops at the c
 6. **Given** 4 rows of a per-token model never used with those settings, **When** I run
    `batch`, **Then** the first row runs alone, its actual cost becomes the price of the
    other 3, and they're then budgeted like any other row.
+7. **Given** neither `--budget` nor `--no-budget`, **When** I run `batch`, **Then** nothing
+   is generated and the CLI exits 2 saying to pass one of them.
+8. **Given** `--no-budget`, **When** I run `batch`, **Then** every row runs, stderr warns
+   that the only cap is the key's spending limit on OpenRouter, and the report shows
+   `"budget_usd": null`.
+9. **Given** a budgeted batch whose first row has an unknown price and comes back without
+   `usage.cost`, **When** it finishes, **Then** no further rows start, the rest are
+   `not_run`, the CLI exits 8, and the message gives the command to continue with
+   `--no-budget --resume <batch-id>`; resuming with `--budget` instead exits 2 with the
+   same advice.
 
 ---
 
@@ -339,7 +355,8 @@ the test suite against the shape it declares.
 - **Fewer images than requested:** `n` is an upper bound; the CLI saves what comes back
   and the JSON shows how many.
 - **Generation times out or is interrupted (Ctrl-C):** no ledger entry; the message says
-  the provider may still have charged and to check openrouter.ai activity.
+  the provider may still have charged and to check openrouter.ai activity. Ctrl-C exits
+  130; a timeout exits 7.
 - **Cut-off last ledger line** (crash mid-write): skipped when reading, with a warning on
   stderr; other entries are unaffected.
 - **Ledger entry from a newer CLI** (unknown format version): skipped with a warning.
@@ -460,8 +477,10 @@ the test suite against the shape it declares.
 - **FR-036**: Any part of the cost the CLI can't compute (e.g. a pricing line whose
   `billable` it doesn't recognize) MUST be listed in `notes` and makes the kind no better
   than `estimate`.
-- **FR-037**: Text output shows the price in USD with up to three significant decimals
-  (`$0.007`, `$0.04`), prefixed `≤` for `at_most` and `~` for `estimate`.
+- **FR-037**: Text output shows prices in USD: under $1 rounded to three significant
+  figures with trailing zeros dropped (`$0.04`, `$0.007`, `$0.0387`, `$0.000123`), $1 or
+  more with two decimals (`$1.25`, `$12.34`); prefixed `≤` for `at_most` and `~` for
+  `estimate`. JSON keeps the full number.
 
 **Agent interface (all commands)**
 
@@ -478,6 +497,7 @@ the test suite against the shape it declares.
   | 6 | Rate limited (429) | `rate_limited` | yes |
   | 7 | OpenRouter, provider or network failure, or timeout (5xx, 524) | `upstream` | yes |
   | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks) | `partial` | depends |
+  | 130 | Interrupted (Ctrl-C); nothing on stdout, even with `--json` | | |
 
 - **FR-040a**: For exit 4, the message MUST say whether the account's credits or the key's
   own limit ran out (from the error's `metadata.limit_source` when present) and link to
@@ -486,17 +506,21 @@ the test suite against the shape it declares.
   price.
 - **FR-041**: `--json` MUST work on every command. Success: one JSON object on stdout.
   Failure: `{"error": {"code", "message", "retryable"}}` on stdout. Nothing else on stdout.
+  The one exception is an interrupted command (Ctrl-C, exit 130), which prints nothing on
+  stdout.
   Exit 8 is not a failure of the command: it prints the command's normal result (the
   `batch` report, the `doctor` checks), whose per-item statuses say what failed.
 - **FR-042**: Logs, progress and warnings MUST go to stderr only. Color and progress
   animation only when the stream is a TTY and `NO_COLOR` isn't set.
 - **FR-043**: The CLI MUST never prompt when stdin isn't a TTY.
 - **FR-044**: Every command MUST have `--help`; `cosmion --version` prints the version.
-- **FR-044a**: The package MUST install the CLI as two commands, `cosmion` and `csm`, that
-  behave identically. Help text, `SKILL.md` and the README use `cosmion` and mention `csm`
+- **FR-044a**: The package MUST install the CLI as two commands, `cosmion` and `csn`, that
+  behave identically. Help text, `SKILL.md` and the README use `cosmion` and mention `csn`
   as the short form.
 - **FR-045**: A `SKILL.md` MUST ship in the npm package describing every command, option,
-  JSON output shape and exit code.
+  JSON output shape and exit code. It tells agents to always pass `--budget` to `batch`
+  and to use `--no-budget` only when the user asks for it; if a batch stops because a
+  cost is unknown, the agent tells the user and suggests it rather than using it.
 
 **Key**
 
@@ -561,18 +585,30 @@ the test suite against the shape it declares.
   (including an image item without `b64_json`) exits 7 with a message, never a crash
   trace.
 
-**Batch: `cosmion batch <file> --budget <usd> [options]`**
+**Environment**
+
+- **FR-057**: `COSMION_HOME=<dir>` MUST put all of Cosmion's files (settings, ledger,
+  catalog cache) under that folder instead of the per-OS defaults. The README and
+  `SKILL.md` document it.
+- **FR-058**: `COSMION_TEST_OPENROUTER_URL` replaces the OpenRouter address, so tests that
+  run the real program can use a fake. It exists for the test suite only: it isn't in
+  the README or `SKILL.md` and isn't part of the stable interface.
+
+**Batch: `cosmion batch <file> (--budget <usd> | --no-budget) [options]`**
 
 - **FR-070**: `batch` MUST read CSV (with a header row) or JSONL, chosen by the `.csv` or
   `.jsonl` extension. Each row has `prompt` (required), `model` (required unless `--model`
   or `COSMION_MODEL` is set), and optionally the `gen` options as columns: `aspect`, `resolution`,
   `quality`, `background`, `count`, `seed`, `format`, `compression`, `ref` (several refs
   separated by `|` in CSV, an array in JSONL) and `out`. Unknown columns exit 2.
-- **FR-071**: `--budget <usd>` MUST be required. Options `--model`, `--out <folder>`
+- **FR-071**: Exactly one of `--budget <usd>` or `--no-budget` MUST be passed; neither or
+  both exits 2, as does a budget that isn't a number greater than 0. `--no-budget` MUST print a warning on stderr that the batch's only cap is
+  the key's spending limit on OpenRouter, and its help text says agents use it only when
+  the user asks. Options `--model`, `--out <folder>`
   (default for rows without `out`), `--concurrency <1-8>` (default 2), `--force`,
   `--dry-run`, `--resume <batch-id>` and `--json` are supported.
-- **FR-072**: Every row MUST be validated as `gen` validates (FR-012) before anything is
-  spent; any invalid row exits 2 with every bad row's number and reason.
+- **FR-072**: Every row that will run (all of them, except rows `--resume` skips) MUST be
+  validated as `gen` validates (FR-012) before anything is spent; any invalid row exits 2 with every bad row's number and reason.
 - **FR-073**: The budget is a per-run guard (the key's OpenRouter limit is the hard
   stop). A row with a known price (`exact`, `at_most`, `estimate`) starts only if that
   price fits in the budget minus what the batch has spent and the prices of rows still
@@ -580,19 +616,28 @@ the test suite against the shape it declares.
   budget has room left; once it finishes, its actual cost (per image) is the price of the
   remaining rows with the same model and settings. So the batch can go over the budget by
   at most one unknown-priced image. Rows that never fit are `skipped_budget`. Spending is
-  tracked from each finished row's actual `usage.cost`.
+  tracked from each finished row's actual `usage.cost`. With `--no-budget`, rows start as
+  concurrency allows, whatever their price.
+- **FR-073a**: With `--budget`, a finished row whose response has no `usage.cost` MUST
+  count its price as spent if that price was known. If it wasn't, the budget can no
+  longer be tracked: no further rows start, the rest are `not_run`, and the message gives
+  the command to continue without a cap (`cosmion batch <file> --no-budget --resume
+  <batch-id>`). The message is printed on stderr and is in the report's `stopped`
+  (`{"code": "unknown_cost", "message"}`). The budget is never quietly weakened: on `--resume` such a row counts the
+  same way, and if its price is still unknown, `--resume` with `--budget` exits 2 with the
+  same advice.
 - **FR-074**: Each finished row MUST append its own ledger entry with the batch's
   `batch_id` and its 1-based `row`.
 - **FR-075**: A row failing with a retryable or `usage` error is marked `failed` and the
   batch continues; a `credits` or `auth` error stops new rows from starting (FR-040 code
-  of that error). Rows are never retried automatically.
+  of that error), and the report's `stopped` holds that error's `code` and `message`. Rows are never retried automatically.
 - **FR-076**: `--resume <batch-id>` MUST skip rows that have a ledger entry for that batch
   and row, and count that batch's earlier spending against `--budget`. The file is
   expected to be the same; rows are matched by number.
 - **FR-077**: `--dry-run` MUST validate, print each row's price and the total, and spend
   nothing.
 - **FR-078**: Exit 0 when every row succeeded; 3 or 4 when an auth or credits error
-  stopped the batch (FR-075); otherwise 8 when any row failed or was skipped.
+  stopped the batch (FR-075); otherwise 8 when any row failed, was skipped or didn't run.
   Text mode: saved paths on stdout, progress on stderr.
 
 **Usage: `cosmion usage [--since <when>] [--until <when>] [--by model|day] [--json]`**
@@ -640,7 +685,7 @@ the test suite against the shape it declares.
 **Release**
 
 - **FR-060**: The package MUST be `cosmion` on npm, MIT-licensed (a `LICENSE` file and the
-  `license` field), require Node 22+ (`engines`), include no native modules, and ship as a
+  `license` field), require Node 22.12+ (`engines`), include no native modules, and ship as a
   single package.
 - **FR-061**: The README MUST include install, a terminal example, an agent example, the
   privacy sentence (images and history stay on your machine; prompts and reference images
@@ -668,7 +713,7 @@ the test suite against the shape it declares.
 - `models <id>`: `{"id", "name", "description", "parameters", "endpoints": [{"provider_name", "provider_tag", "supported_parameters", "pricing"}], "fetched_at"}`
 - `price`: `{"model", "settings", "kind", "cost_usd", "notes": []}`
 - `auth`: `{"saved": true, "label"}`; `auth status`: `{"source", "valid", "label", "limit_usd", "limit_remaining_usd", "usage_usd", "balance_usd"}`; `auth logout`: `{"removed": true|false}`
-- `batch`: `{"batch_id", "budget_usd", "spent_usd", "rows": [{"row", "status": "ok|failed|skipped_budget|skipped_resumed|not_run", "id", "paths", "cost_usd", "price", "error"}]}`; with `--dry-run`, `{"rows": [{"row", "price"}], "total": <price>}`
+- `batch`: `{"batch_id", "budget_usd" (null with --no-budget), "spent_usd", "stopped" (null, or {"code", "message"} when the batch stopped early), "rows": [{"row", "status": "ok|failed|skipped_budget|skipped_resumed|not_run", "id", "paths", "cost_usd", "price", "error"}]}`; with `--dry-run`, `{"rows": [{"row", "price"}], "total": <price>}`
 - `usage`: `{"since", "until", "by", "total_usd", "generations", "images", "unknown_cost_count", "groups": [{"key", "total_usd", "generations", "images", "unknown_cost_count"}]}`
 - `regen`: the new ledger entry (as `gen`)
 - `models rank`: `{"settings", "models": [{"id", "name", "price"}]}`
@@ -685,14 +730,15 @@ the test suite against the shape it declares.
   equals the charged `usage.cost`, except where the catalog itself is wrong (Riverflow,
   found 2026-10-17); there, after one generation, `price` shows the last actual cost.
 - **SC-003**: Every command, run with `--json` in every success and failure case covered by
-  the tests, produces stdout that parses as one JSON object, with the documented exit code.
+  the tests, produces stdout that parses as one JSON object (or nothing, when interrupted),
+  with the documented exit code.
 - **SC-004**: No test reaches the network or the user's real folders; the suite runs offline.
 - **SC-005**: `history` and `show` respond in under 1 second with 10,000 ledger entries.
 - **SC-006**: 20 concurrent `gen` runs against a fake produce 20 complete ledger lines.
 - **SC-007**: An agent given only `SKILL.md` and `--help` can generate an image to a given
   path and report its cost without human help.
-- **SC-008**: In tests against a fake with fixed prices, no batch spends more than its
-  budget when every price is known, and never more than the budget plus one image when some
+- **SC-008**: In tests against a fake with fixed prices, no batch run with `--budget`
+  spends more than its budget when every price is known, and never more than the budget plus one image when some
   are unknown.
 
 ## Assumptions

@@ -106,9 +106,12 @@ tests/
 │   ├── fake-openrouter.ts A fake that answers like OpenRouter, as a fetch function and
 │   │                      (for multi-process tests) as a local HTTP server
 │   ├── run-cli.ts         Run a command in-process with a temp COSMION_HOME and cwd
-│   └── fixtures/          Catalog fixtures (one model per pricing case), tiny images
-├── core/                  Unit tests: options, pricing, money, batch scheduler, errors
-├── cli/                   One file per command, plus ledger, out-paths, refs, batch-file
+│   ├── fixtures/          Catalog fixtures (one model per pricing case), tiny images
+│   └── setup.ts           Replaces the global fetch with one that throws (SC-004)
+├── core/                  Unit tests: openrouter, options, pricing, money, ids,
+│                          settings-file, batch scheduler
+├── cli/                   One file per command, plus run, agent-interface, ledger,
+│                          out-paths, refs, batch-file
 ├── boundary.test.ts       core/cli import rule
 ├── skill-md.test.ts       SKILL.md mentions every command, option and exit code
 └── concurrency.test.ts    20 real processes appending to one ledger (SC-006)
@@ -164,6 +167,10 @@ export const price = defineCommand({
   body that echoes a header.
 - Exit 8 isn't an error: `batch` and `doctor` return their normal result with
   `exitCode: 8`.
+- Exit 130 (Ctrl-C) prints nothing on stdout, even with `--json`; the message goes to
+  stderr (FR-041).
+- **Prices in text** (`formatUsd`, FR-037): under $1, three significant figures without
+  trailing zeros; $1 or more, two decimals.
 
 ### Money: integer nano-dollars
 
@@ -249,7 +256,7 @@ Details:
   once there's a public URL.
 - **Ctrl-C:** `main.ts` turns SIGINT into an `AbortSignal` in the context. An aborted
   generation writes no ledger entry and prints the "may still have been charged" message.
-  See open question 2 for the exit code.
+  It exits 130 (FR-040).
 
 ### Ledger (FR-050–FR-054)
 
@@ -287,6 +294,12 @@ Split into the pure money logic and the CLI around it:
 - `batch.ts` (command): resolves each row with `--model`/`COSMION_MODEL` as default, runs
   **Prepare** on every row that will run, and exits 2 listing every bad row. It also
   refuses two rows writing the same path. Each row is priced as `price` would.
+- **`--budget` and `--no-budget` are two separate options** in the command definition.
+  Commander would otherwise read `--no-budget` as "turn `--budget` off" and let the last
+  one win, so the command checks that exactly one was given and that the budget is a
+  number above 0 (FR-071).
+- The report's `stopped` is `null`, or `{ code, message }` when a `credits`/`auth` error
+  or an unknown cost (`unknown_cost`) stopped new rows; the same message goes to stderr.
 - `core/batch.ts` (scheduler): given rows with prices, a budget, what's already spent, a
   concurrency and a `runRow` callback, decides what starts when:
   - Rows are taken **in file order**. A known-price row starts when its price fits in
@@ -298,12 +311,18 @@ Split into the pure money logic and the CLI around it:
     rows in its group (same model and same settings).
   - Spending is the sum of finished rows' actual costs. A `credits` or `auth` error stops
     new rows; running ones finish; the rest are `not_run`.
+  - A finished row with no `usage.cost` counts its price if it had one; if not, no new
+    rows start and the rest are `not_run` (FR-073a).
+  - With `--no-budget` the budget is `null` and a row starts as soon as a slot is free.
   - It never touches files or the ledger; the callback does. That keeps it fast to test
     with fake rows and fake timings, including SC-008's "never over budget" checks.
 - **Resume** (FR-076): a row is done if the ledger has an entry for that `batch_id` and
   `row` **with at least one saved image** (so a paid-but-not-saved row is retried). Done
   rows are `skipped_resumed` and not validated again (their output files now exist).
-  Every earlier entry of the batch, done or not, counts toward spending.
+  Every earlier entry of the batch, done or not, counts toward spending. An earlier entry
+  with no cost counts its row's price; if that's unknown and `--budget` is given, exit 2
+  pointing to `--no-budget` (FR-073a).
+- `--no-budget` prints its warning on stderr before any row starts.
 - Paths in the batch file (`out`, `ref`) are relative to the current folder, like `gen`.
 - Text mode prints the batch id on stderr at the start, so an interrupted run can be
   resumed.
@@ -329,12 +348,13 @@ on Windows") on Windows.
   the `X-OpenRouter-Title` header (passed into the `core` client) all read from it, so a
   rename before release is mostly one line. Four real uses, so it isn't premature.
 - Folders come from `env-paths('cosmion-cli', { suffix: '' })`.
-- Two environment variables exist for testing, needed because some tests must run the
-  real installed binary (the packaging check, FR-063; 20 concurrent processes, SC-006):
-  - `COSMION_HOME=<dir>` puts `config/`, `data/` and `cache/` under one folder (also
-    handy for a sandboxed agent).
-  - `COSMION_OPENROUTER_URL` replaces `https://openrouter.ai/api/v1`.
-  Both are documented in the README and `SKILL.md`. See open question 3.
+- Two environment variables let a separate process be pointed at a temp folder and a
+  fake, which the tests that run the real installed binary need (the packaging check,
+  FR-063; 20 concurrent processes, SC-006):
+  - `COSMION_HOME=<dir>` puts `config/`, `data/` and `cache/` under one folder (FR-057).
+    A real feature, documented in the README and `SKILL.md`.
+  - `COSMION_TEST_OPENROUTER_URL` replaces `https://openrouter.ai/api/v1` (FR-058).
+    Test-only: mentioned in `CLAUDE.md`, not in user docs.
 
 ## Testing
 
@@ -342,8 +362,9 @@ Test-first per constitution IV. Strict for `src/core`, the ledger, every command
 behavior (`--json` output, exit codes, files written) and the batch budget.
 
 - **Testing seams** (the only things passed in, constitution II): every command gets a
-  `Context`: `env`, `cwd`, `stdin`/`stdout`/`stderr` (with their TTY flags), `fetch` and
-  an `AbortSignal`. Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
+  `Context`: `env`, `cwd`, `stdin`/`stdout`/`stderr` (with their TTY flags), `fetch`, the
+  OpenRouter base URL (from `COSMION_TEST_OPENROUTER_URL` in `main.ts`, otherwise the real
+  one) and an `AbortSignal`. Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
   settings file are swapped by pointing at a temp folder. `cwd` is in the context because
   tests can't safely change the process's folder.
 - **`runCli(args, options)`** creates a temp `COSMION_HOME` and cwd, runs the command
@@ -362,29 +383,32 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
   exist.
 - **Interactive input** (`auth` on a TTY): behavior only, with a fake TTY stdin.
 - Permission tests are skipped on Windows. Nothing reaches the network or the user's
-  folders (SC-004): the fake is the only `fetch` command tests get, and
-  `vitest.config.ts` sets `COSMION_HOME` to a temp folder for anything that slips through.
+  folders (SC-004): the fake is the only `fetch` command tests get, the global `fetch` is
+  replaced with one that throws (`tests/helpers/setup.ts`), and `vitest.config.ts` sets
+  `COSMION_HOME` to a temp folder for anything that slips through.
+- `runCli` accepts an empty stdout only for exit 130.
+- The SC-005 timing test builds its 10,000-entry ledger before the timer starts.
 
 ## Build, run and release
 
 | Command | Does |
 |---------|------|
 | `npm run build` | `tsc` → `dist/` |
-| `npm test` | Vitest (all tests) |
+| `npm test` | Builds first (`pretest`, because the concurrency test runs `dist/`), then Vitest (all tests) |
 | `npm run lint` | Biome lint + format check, and `tsc --noEmit` |
 | `npm run format` | Biome formats the code |
 | `node dist/cli/main.js …` (or `npm link` once, then `cosmion …`) | Run the built CLI locally |
 | `npm run pack-check` | `scripts/pack-check.mjs` (FR-063) |
 
 - `package.json`: `name: "cosmion"`, `type: "module"`,
-  `bin: { "cosmion": "dist/cli/main.js", "csm": "dist/cli/main.js" }` (FR-044a),
+  `bin: { "cosmion": "dist/cli/main.js", "csn": "dist/cli/main.js" }` (FR-044a),
   `files: ["dist", "SKILL.md"]` (npm adds README and LICENSE), `license: "MIT"`,
   `engines.node: ">=22.12.0"`. The version is read at runtime from `package.json`.
 - **CI** (`.github/workflows/ci.yml`): on every push, on Ubuntu, macOS and Windows with
   Node 22: install, lint, test, build, pack-check. On a `v*` tag, after those pass on all
   three: `npm publish` with npm's trusted publishing (GitHub's OIDC, no stored token;
   set up once on npmjs.com) and provenance.
-- **npm name:** `cosmion` has never been published (checked 2026-10-18), and the `csm`
+- **npm name:** `cosmion` has never been published (checked 2026-10-18), and the `csn`
   package installs no command, so neither command clashes. Worth publishing a placeholder
   early to hold the name. Before launch, search USPTO, EUIPO and CIPC for "COSMION" in
   classes 9 and 42.
@@ -393,17 +417,18 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
 
 Each phase leaves the CLI working and tested:
 
-1. Scaffold: package, TypeScript, Biome, Vitest, CI, the boundary test, `runCli` and the
-   fake.
+1. Scaffold: package, TypeScript, Biome, Vitest, CI, the boundary test.
 2. Agent interface skeleton: `define.ts`, `run.ts`, output, errors and exit codes,
-   `--json`, `--version`, `--help`.
-3. Catalog + `models`, `models <id>`.
-4. Options and pricing + `price` (US4).
+   `--json`, `--version`, `--help`, and `runCli`.
+3. Catalog + `models`, `models <id>`, with the fake OpenRouter and its fixtures.
+4. Options and pricing + `price` (US4), with ledger reading (for estimates) and refs.
 5. Key: `auth`, `auth status`, `auth logout` (US3).
-6. Ledger + `gen` (US1, US2); then `history`, `show` (US5).
-7. `batch` (US7), then `regen` (US9), `usage` (US8), `models rank` (US10).
-8. `doctor` (US11), `schema` (US12).
-9. Release: `SKILL.md`, README, LICENSE, pack-check, tag publishing (US6).
+6. Ledger + `gen` (US1, US2).
+7. `history`, `show` (US5).
+8. `batch` (US7).
+9. `regen` (US9), `usage` (US8), `models rank` (US10).
+10. `doctor` (US11), `schema` (US12).
+11. Release: `SKILL.md`, README, LICENSE, pack-check, tag publishing (US6).
 
 ## Constitution check
 
@@ -416,24 +441,14 @@ Each phase leaves the CLI working and tested:
 | V. Agent interface | Exit codes in one table; JSON results validated against the published schema; prompts only on a TTY |
 | VI. Logic apart | `core` is pure logic, enforced by a test; data locations live in `cli` |
 
-**Complexity to justify:** two environment variables (`COSMION_HOME`,
-`COSMION_OPENROUTER_URL`) that no user asked for. The packaging check and the concurrency
-test have to run the real binary against a fake in a temporary folder, and there's no
-other way to point a separate process there.
+**Complexity to justify:** `COSMION_TEST_OPENROUTER_URL`, which no user asked for. The
+packaging check and the concurrency test have to run the real binary against a fake, and
+there's no other way to point a separate process there. (`COSMION_HOME` is needed for the
+same reason, but is also an ordinary feature.)
 
 ## Open questions for the maintainer
 
-These are gaps or small corrections to the spec found while planning. The plan assumes
-the recommendation in each; once you decide, the spec gets updated to match.
-
-1. **A batch row whose response has no `usage.cost`.** The budget can't count what it
-   doesn't know. *Recommended:* count that row's known price as spent; if its price was
-   unknown too, start no further rows, mark the rest `not_run`, warn, and exit 8.
-2. **Exit code for Ctrl-C.** The FR-040 table has none. *Recommended:* 130, the shell
-   convention for an interrupted program, added to the table (and `schema`) as
-   "Interrupted", with nothing on stdout.
-3. **The two test environment variables** above are visible to users. *Recommended:*
-   keep them and document them in the README and `SKILL.md`; add one line to the spec so
-   they're part of the stable interface.
-4. **Node 22.12+, not 22+.** Current `commander` and `vitest` need 22.12 (released
-   December 2024). *Recommended:* change FR-060 and Story 6 to "Node 22.12+".
+None. The four found while planning were decided on 2026-10-18 and are in the spec's
+clarifications: a batch row with no `usage.cost` and `--no-budget` (FR-071, FR-073a);
+Ctrl-C exits 130 (FR-040); `COSMION_HOME` documented and the test-only
+`COSMION_TEST_OPENROUTER_URL` (FR-057, FR-058); Node 22.12+ (FR-060).
