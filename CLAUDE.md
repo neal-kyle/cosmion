@@ -32,6 +32,9 @@ Where things are:
 
 Each phase ends with lint, test and build passing.
 
+`COSMION_TEST_OPENROUTER_URL=<url>` points the built CLI at a fake OpenRouter (FR-058). It's
+test-only: keep it out of the README and `SKILL.md`.
+
 Features go through **Spec Kit** (lean preset):
 
 | Command | Use for |

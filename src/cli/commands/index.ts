@@ -1,0 +1,4 @@
+import type { CommandDefinition } from '../define.js'
+
+/** Every command, in the order `--help` lists them. */
+export const commands: readonly CommandDefinition[] = []
