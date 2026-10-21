@@ -13,6 +13,8 @@ export interface RunCliOptions {
   /** The command list; defaults to the real one. */
   commands?: readonly CommandDefinition[]
   fetch?: typeof fetch
+  /** Reuse this COSMION_HOME (a second run in the same home, to see what the first left). */
+  home?: string
   /** The only environment the command sees; COSMION_HOME is added. */
   env?: Record<string, string | undefined>
   stdin?: string
@@ -40,7 +42,7 @@ export interface RunCliResult {
  * schema with the exit code FR-040 gives that error, or nothing at all for exit 130.
  */
 export async function runCli(args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
-  const home = mkdtempSync(join(tmpdir(), 'cosmion-home-'))
+  const home = options.home ?? mkdtempSync(join(tmpdir(), 'cosmion-home-'))
   const cwd = mkdtempSync(join(tmpdir(), 'cosmion-cwd-'))
   let stdout = ''
   let stderr = ''
