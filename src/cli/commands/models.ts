@@ -1,8 +1,11 @@
 import { z } from 'zod'
 import { referenceSupport } from '../../core/catalog.js'
 import { endpointSchema, type Parameter, supportedParametersSchema } from '../../core/openrouter.js'
+import { price as priceOf } from '../../core/pricing.js'
 import { loadCatalog, loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
+import { findNewestMatch, readLedger } from '../ledger.js'
+import { priceSchema, priceText } from './price.js'
 
 const listedModelSchema = z.strictObject({
   id: z.string(),
@@ -11,6 +14,8 @@ const listedModelSchema = z.strictObject({
   max_references: z.number().int(),
   /** The names of the options the model supports; `models <id>` gives their values. */
   parameters: z.array(z.string()),
+  /** What `price -m <id>` gives with no options (FR-020). */
+  price: priceSchema,
 })
 
 const listSchema = z.strictObject({
@@ -52,15 +57,18 @@ export const models = defineCommand({
   async run(input, ctx) {
     if (input.id === undefined) {
       const { catalog } = await loadCatalog(ctx, { refresh: input.refresh })
+      const ledger = await readLedger(ctx)
       const data: List = {
         models: catalog.models.map((model) => {
           const references = referenceSupport(model)
+          const lastMatch = findNewestMatch(ledger, model.id, {}, 0)
           return {
             id: model.id,
             name: model.name,
             accepts_references: references.accepted,
             max_references: references.max,
             parameters: Object.keys(model.supported_parameters),
+            price: priceOf(model, { settings: {}, refCount: 0 }, lastMatch ?? null),
           }
         }),
         fetched_at: catalog.fetched_at,
@@ -85,10 +93,11 @@ function listText(list: List): string {
   const rows = list.models.map((model) => [
     model.id,
     model.name,
+    priceText(model.price),
     model.accepts_references ? String(model.max_references) : '-',
     model.parameters.join(', '),
   ])
-  return table([['ID', 'NAME', 'REFS', 'OPTIONS'], ...rows])
+  return table([['ID', 'NAME', 'PRICE', 'REFS', 'OPTIONS'], ...rows])
 }
 
 function detailText(detail: Detail): string {

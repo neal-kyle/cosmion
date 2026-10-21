@@ -15,6 +15,8 @@ export interface RunCliOptions {
   fetch?: typeof fetch
   /** Reuse this COSMION_HOME (a second run in the same home, to see what the first left). */
   home?: string
+  /** Run in this folder, e.g. one holding the files a test passes in. */
+  cwd?: string
   /** The only environment the command sees; COSMION_HOME is added. */
   env?: Record<string, string | undefined>
   stdin?: string
@@ -42,8 +44,23 @@ export interface RunCliResult {
  * schema with the exit code FR-040 gives that error, or nothing at all for exit 130.
  */
 export async function runCli(args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
+  const test = createTestContext(options)
+  const commands = options.commands ?? allCommands
+  const exitCode = await run(args, test.ctx, commands)
+
+  const stdout = test.stdout()
+  let json: unknown
+  if (wantsJson(args)) json = checkJson(args, exitCode, stdout, commands)
+  return { exitCode, stdout, stderr: test.stderr(), json, home: test.home, cwd: test.cwd }
+}
+
+/**
+ * A context like runCli's, for testing a function that takes one: a temp COSMION_HOME and
+ * cwd (unless given), and stdout and stderr captured.
+ */
+export function createTestContext(options: Omit<RunCliOptions, 'commands'> = {}) {
   const home = options.home ?? mkdtempSync(join(tmpdir(), 'cosmion-home-'))
-  const cwd = mkdtempSync(join(tmpdir(), 'cosmion-cwd-'))
+  const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), 'cosmion-cwd-'))
   let stdout = ''
   let stderr = ''
   const stdin = Object.assign(Readable.from(options.stdin === undefined ? [] : [options.stdin]), {
@@ -72,12 +89,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     platform: options.platform ?? 'linux',
     nodeVersion: options.nodeVersion ?? '22.12.0',
   }
-  const commands = options.commands ?? allCommands
-  const exitCode = await run(args, ctx, commands)
-
-  let json: unknown
-  if (wantsJson(args)) json = checkJson(args, exitCode, stdout, commands)
-  return { exitCode, stdout, stderr, json, home, cwd }
+  return { ctx, home, cwd, stdout: () => stdout, stderr: () => stderr }
 }
 
 const noFetch: typeof fetch = async () => {

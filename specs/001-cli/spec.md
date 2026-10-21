@@ -469,7 +469,9 @@ the test suite against the shape it declares.
   chosen, or a variant name that can't be matched) → the highest output line, as a
   ceiling. If all candidate lines have the same price, it's exact.
 - **FR-033**: Reference lines MUST be added when refs are passed: `input_image` /
-  `input_reference` per `image` × number of refs, per `request` once.
+  `input_reference` per `image` × number of refs, per `request` once. They are charged
+  once per request, not again for each image `--count` asks for (assumed; checked live
+  by T100).
 - **FR-034**: The result MUST have one of four kinds:
   - `exact`: per-image price fully determined;
   - `at_most`: a ceiling (several providers at different prices, or FR-032 ambiguity);

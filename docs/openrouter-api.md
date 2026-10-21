@@ -191,7 +191,9 @@ the actual cost, which corrects both (below).
   daily (the CLI caches it for up to 24 hours), so shown prices reflect current rates.
 - **No pricing listed:** "Price not listed"; actual recorded after.
 - **Reference images** add their own lines (`input_image`, `input_reference`); include
-  them when present.
+  them when present. **(verify)** Cosmion assumes they're charged once per request, not
+  again for each image when `n` > 1. Unchecked live: it only matters for a model that
+  charges per reference image and also allows `n` > 1.
 - **After generating:** `usage.cost` in the response is the actual amount charged, and is
   what the ledger stores.
 

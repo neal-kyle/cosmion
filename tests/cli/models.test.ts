@@ -1,7 +1,9 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { createFakeOpenRouter, type FakeConfig } from '../helpers/fake-openrouter.js'
+import { ledgerEntry, writeLedger } from '../helpers/ledger.js'
 import { runCli } from '../helpers/run-cli.js'
 
 const HOUR = 60 * 60 * 1000
@@ -12,6 +14,7 @@ interface ListedModel {
   accepts_references: boolean
   max_references: number
   parameters: string[]
+  price: { kind: string; cost_usd: number | null; notes: string[] }
 }
 interface Listing {
   models: ListedModel[]
@@ -128,6 +131,48 @@ describe('models', () => {
       expect(request.headers['x-openrouter-title']).toBe('Cosmion')
       expect(request.headers).not.toHaveProperty('authorization')
     }
+  })
+})
+
+describe('the price summary (FR-020)', () => {
+  test("each model's price is what `price -m <id>` gives with no options", async () => {
+    const { fake, models } = setup()
+    const home = mkdtempSync(join(tmpdir(), 'cosmion-home-'))
+    // One estimate among them, so the ledger is read too.
+    writeLedger(home, [
+      ledgerEntry({
+        model: 'google/gemini-2.5-flash-image',
+        settings: { seed: 3 },
+        usage: { prompt_tokens: 17, completion_tokens: 1290, total_tokens: 1307 },
+      }),
+    ])
+    const listing = (await models(['--json'], { home })).json as Listing
+    for (const model of listing.models) {
+      const priced = await runCli(['price', '-m', model.id, '--json'], { fetch: fake.fetch, home })
+      const { kind, cost_usd, notes } = priced.json as Listing['models'][number]['price']
+      expect(model.price, model.id).toEqual({ kind, cost_usd, notes })
+    }
+    const byId = (id: string) => listing.models.find((m) => m.id === id)?.price
+    expect(byId('bytedance-seed/seedream-4.5')).toEqual({
+      kind: 'exact',
+      cost_usd: 0.04,
+      notes: [],
+    })
+    expect(byId('bytedance-seed/seedream-5-0-pro')).toMatchObject({
+      kind: 'at_most',
+      cost_usd: 0.09,
+    })
+    expect(byId('google/gemini-2.5-flash-image')).toMatchObject({ kind: 'estimate' })
+    expect(byId('krea/krea-2-medium')).toMatchObject({ kind: 'unknown', cost_usd: null })
+  })
+
+  test('text output shows each price on its model line', async () => {
+    const { models } = setup()
+    const result = await models()
+    const line = (id: string) => result.stdout.split('\n').find((l) => l.startsWith(`${id} `))
+    expect(line('bytedance-seed/seedream-4.5')).toContain('$0.04')
+    expect(line('bytedance-seed/seedream-5-0-pro')).toContain('≤$0.09')
+    expect(line('krea/krea-2-medium')).toMatch(/unknown/i)
   })
 })
 

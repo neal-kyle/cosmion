@@ -108,24 +108,24 @@ gains its price summary.
 
 **Tests first**
 
-- [ ] T031 [P] [US4] Write `tests/core/money.test.ts`: USD ↔ integer nano-dollars; `0.2 − 4 × 0.04` leaves exactly `0.04`; per-token prices below a millionth of a dollar survive the round trip
-- [ ] T032 [P] [US4] Write `tests/core/options.test.ts`: an option whose key is absent is unsupported; `enum` accepts only listed values; `range` only integers in range; errors name the flag and the model and list the allowed values (FR-005); the random seed is within the model's `seed` range, or 0–2,147,483,647 (FR-004); the "same settings" key ignores `seed` and key order and includes the number of references
-- [ ] T033 [US4] Write `tests/core/pricing.test.ts`, one test per fixture case: Story 4 scenarios 1–8; FR-032 line selection (case-insensitive `2k` ↔ `2K`, `<quality>_<resolution>`, `high_resolution` above the lowest resolution, variant-less line as the base tier, unmatched variant → highest line as `at_most`, equal candidate prices → `exact`); FR-033 reference lines (`image` unit × refs, `request` unit once); FR-035 × `n`; FR-036 unknown `billable` → note, kind no better than `estimate`; unknown `unit` and no pricing → `unknown`, `cost_usd: null`; per-token estimate uses the highest current input per-token price; per-megapixel estimate is the last actual cost; an estimate with `--count 2` matching an entry made with `n: 2` is that entry's figure, not doubled (FR-034, FR-035); per-image actual cost differing by more than $0.001 → that cost as `estimate` with both figures in `notes`; combining kinds takes the weakest (`exact` → `at_most` → `estimate` → `unknown`)
-- [ ] T034 [US4] Write `tests/cli/ledger.test.ts` (reading): entries are parsed with the FR-050 schema; a cut-off or unparseable line and an unknown `v` are skipped with a stderr warning; unknown fields pass through (FR-052); finding the newest entry with the same model and settings
-- [ ] T035 [P] [US4] Write `tests/cli/refs.test.ts`: local PNG, JPEG and WebP files become base64 data URLs, with the type taken from the bytes, not the extension; `https://` URLs pass unchanged; exit 2 for a model without image input, an unreadable file, another file type, or more refs than the model's `input_references` maximum (FR-006); ledger paths are absolute
-- [ ] T036 [US4] Write `tests/cli/price.test.ts`: model from `--model`/`-m`, then `COSMION_MODEL`, neither → exit 2 suggesting `cosmion models` (FR-002); invalid options exit 2 like `gen` (FR-030); nothing is sent to `POST /images`; estimates come from a seeded ledger file; JSON `{"model", "settings", "kind", "cost_usd", "notes"}`; text uses `formatUsd` with `≤…` for `at_most` and `~…` for `estimate` (FR-037)
-- [ ] T036a [P] [US4] Write `tests/cli/format-usd.test.ts` with every FR-037 example: `$0.04`, `$0.007`, `$0.0387`, `$0.000123` (three significant figures, trailing zeros dropped), `$1.25`, `$12.34` (two decimals from $1), and the `≤`/`~` prefixes
-- [ ] T037 [US4] Extend `tests/cli/models.test.ts`: each model in `models` has a one-line `price` with its FR-034 kind, equal to what `price -m <id>` gives with no options (FR-020)
+- [x] T031 [P] [US4] Write `tests/core/money.test.ts`: USD ↔ integer nano-dollars; `0.2 − 4 × 0.04` leaves exactly `0.04`; per-token prices below a millionth of a dollar survive the round trip
+- [x] T032 [P] [US4] Write `tests/core/options.test.ts`: an option whose key is absent is unsupported; `enum` accepts only listed values; `range` only integers in range; errors name the flag and the model and list the allowed values (FR-005); the random seed is within the model's `seed` range, or 0–2,147,483,647 (FR-004); the "same settings" key ignores `seed` and key order and includes the number of references
+- [x] T033 [US4] Write `tests/core/pricing.test.ts`, one test per fixture case: Story 4 scenarios 1–8; FR-032 line selection (case-insensitive `2k` ↔ `2K`, `<quality>_<resolution>`, `high_resolution` above the lowest resolution, variant-less line as the base tier, unmatched variant → highest line as `at_most`, equal candidate prices → `exact`); FR-033 reference lines (`image` unit × refs, `request` unit once); FR-035 × `n`; FR-036 unknown `billable` → note, kind no better than `estimate`; unknown `unit` and no pricing → `unknown`, `cost_usd: null`; per-token estimate uses the highest current input per-token price; per-megapixel estimate is the last actual cost; an estimate with `--count 2` matching an entry made with `n: 2` is that entry's figure, not doubled (FR-034, FR-035); per-image actual cost differing by more than $0.001 → that cost as `estimate` with both figures in `notes`; combining kinds takes the weakest (`exact` → `at_most` → `estimate` → `unknown`)
+- [x] T034 [US4] Write `tests/cli/ledger.test.ts` (reading): entries are parsed with the FR-050 schema; a cut-off or unparseable line and an unknown `v` are skipped with a stderr warning; unknown fields pass through (FR-052); finding the newest entry with the same model and settings
+- [x] T035 [P] [US4] Write `tests/cli/refs.test.ts`: local PNG, JPEG and WebP files become base64 data URLs, with the type taken from the bytes, not the extension; `https://` URLs pass unchanged; exit 2 for a model without image input, an unreadable file, another file type, or more refs than the model's `input_references` maximum (FR-006); ledger paths are absolute
+- [x] T036 [US4] Write `tests/cli/price.test.ts`: model from `--model`/`-m`, then `COSMION_MODEL`, neither → exit 2 suggesting `cosmion models` (FR-002); invalid options exit 2 like `gen` (FR-030); nothing is sent to `POST /images`; estimates come from a seeded ledger file; JSON `{"model", "settings", "kind", "cost_usd", "notes"}`; text uses `formatUsd` with `≤…` for `at_most` and `~…` for `estimate` (FR-037)
+- [x] T036a [P] [US4] Write `tests/cli/format-usd.test.ts` with every FR-037 example: `$0.04`, `$0.007`, `$0.0387`, `$0.000123` (three significant figures, trailing zeros dropped), `$1.25`, `$12.34` (two decimals from $1), and the `≤`/`~` prefixes
+- [x] T037 [US4] Extend `tests/cli/models.test.ts`: each model in `models` has a one-line `price` with its FR-034 kind, equal to what `price -m <id>` gives with no options (FR-020)
 
 **Implementation**
 
-- [ ] T038 [P] [US4] Create `src/core/money.ts`
-- [ ] T039 [P] [US4] Create `src/core/options.ts`: gen options ↔ API fields, validation against `supported_parameters`, the "same settings" key, the random seed
-- [ ] T040 [US4] Create `src/core/pricing.ts`: `price(model, { settings, refCount }, lastMatch)` and combining kinds
-- [ ] T041 [P] [US4] Create `src/cli/gen-options.ts`: the nine gen option definitions (FR-003) shared by `gen`, `price`, `models rank` and batch columns
-- [ ] T042 [P] [US4] Create `src/cli/ledger.ts` (entry zod schema per FR-050, read, find newest match) and `src/cli/refs.ts`
-- [ ] T043 [US4] Add `formatUsd` to `src/cli/output.ts`: under $1, three significant figures without trailing zeros (`$0.04`, `$0.007`, `$0.0387`); $1 or more, two decimals (`$12.34`); `≤`/`~` prefixes (FR-037)
-- [ ] T044 [US4] Create `src/cli/commands/price.ts`, register it, and add the price summary to `src/cli/commands/models.ts`
+- [x] T038 [P] [US4] Create `src/core/money.ts`
+- [x] T039 [P] [US4] Create `src/core/options.ts`: gen options ↔ API fields, validation against `supported_parameters`, the "same settings" key, the random seed
+- [x] T040 [US4] Create `src/core/pricing.ts`: `price(model, { settings, refCount }, lastMatch)` and combining kinds
+- [x] T041 [P] [US4] Create `src/cli/gen-options.ts`: the nine gen option definitions (FR-003) shared by `gen`, `price`, `models rank` and batch columns
+- [x] T042 [P] [US4] Create `src/cli/ledger.ts` (entry zod schema per FR-050, read, find newest match) and `src/cli/refs.ts`
+- [x] T043 [US4] Add `formatUsd` to `src/cli/output.ts`: under $1, three significant figures without trailing zeros (`$0.04`, `$0.007`, `$0.0387`); $1 or more, two decimals (`$12.34`); `≤`/`~` prefixes (FR-037)
+- [x] T044 [US4] Create `src/cli/commands/price.ts`, register it, and add the price summary to `src/cli/commands/models.ts`
 
 **Checkpoint**: every pricing case in `docs/openrouter-api.md` → Charged vs listed has a passing test.
 
@@ -286,7 +286,7 @@ from.
 **Manual checks by the maintainer** (they need real money, a real key or a fresh machine)
 
 - [ ] T099 Set up npm trusted publishing for `cosmion` on npmjs.com, and give the GitHub repo the same description as the README's first line and topics such as `openrouter`, `image-generation`, `cli` and `ai-agents`
-- [ ] T100 SC-002: generate with at least 5 per-image models and check every `exact` price equals the charged `usage.cost` (Riverflow excepted; after one generation `price` shows its last actual cost)
+- [ ] T100 SC-002: generate with at least 5 per-image models and check every `exact` price equals the charged `usage.cost` (Riverflow excepted; after one generation `price` shows its last actual cost). Also run one with `--count 2` and a `--ref` on a model that charges for references, to check that references are charged once per request, not per image (FR-033)
 - [ ] T101 SC-001: from `npm install -g cosmion` to a saved image in under 2 minutes
 - [ ] T102 SC-007: an agent given only `SKILL.md` and `--help` generates an image to a given path and reports its cost
 

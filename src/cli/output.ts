@@ -1,6 +1,7 @@
 import { styleText } from 'node:util'
 import { z } from 'zod'
 import { ERROR_CODES } from '../core/errors.js'
+import type { PriceKind } from '../core/pricing.js'
 import type { Context, OutStream } from './context.js'
 
 /** What `--json` prints on failure (FR-041). */
@@ -51,6 +52,27 @@ export function spinner(ctx: Context, label: string): { stop(): void } {
       ctx.stderr.write('\r\x1b[K')
     },
   }
+}
+
+/**
+ * A price for text output (FR-037): under $1, three significant figures without trailing
+ * zeros ($0.04, $0.0387); from $1, two decimals ($12.34). `≤` marks a ceiling, `~` an
+ * estimate. JSON keeps the full number.
+ */
+export function formatUsd(usd: number, kind?: PriceKind): string {
+  const prefix = kind === 'at_most' ? '≤' : kind === 'estimate' ? '~' : ''
+  return `${prefix}$${amount(usd)}`
+}
+
+function amount(usd: number): string {
+  if (usd === 0) return '0'
+  if (usd < 1) {
+    const decimals = 2 - Math.floor(Math.log10(usd))
+    const text = usd.toFixed(decimals)
+    // Something like 0.9996 rounds up to a dollar, and is shown like one.
+    if (Number(text) < 1) return text.replace(/0+$/, '').replace(/\.$/, '')
+  }
+  return usd.toFixed(2)
 }
 
 /**
