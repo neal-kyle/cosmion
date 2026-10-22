@@ -22,6 +22,18 @@ export function loadCatalogFixtures(): {
   return { models, endpoints }
 }
 
+/** What GET /key answers for one key: the fields Cosmion reads, plus a few it ignores. */
+export interface KeyRecord {
+  label: string
+  limit: number | null
+  limit_remaining: number | null
+  usage: number
+  [key: string]: unknown
+}
+
+/** A key the fake accepts by default. */
+export const VALID_KEY = 'sk-or-v1-fake0valid0key0000000000000000000000000000000000000000000000'
+
 export interface RecordedRequest {
   method: string
   /** Without the `/api/v1` prefix, e.g. `/images/models`. */
@@ -35,6 +47,12 @@ export interface RecordedRequest {
 export interface FakeConfig {
   models: CatalogModel[]
   endpoints: Record<string, CatalogEndpoints>
+  /** The keys GET /key and GET /credits accept; any other gets a 401. */
+  keys: Record<string, KeyRecord>
+  /** What GET /credits answers for an accepted key. */
+  credits: { total_credits: number; total_usage: number }
+  /** GET /credits answers 403, as the docs say it does for keys that aren't management keys. */
+  creditsRefused: boolean
   /** Every request gets this error status instead of its normal answer. */
   status?: number
   /** The `error.metadata` of that error, e.g. `{ limit_source: 'openrouter_credits' }`. */
@@ -63,6 +81,19 @@ export interface FakeOpenRouter {
 export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeOpenRouter {
   const config: FakeConfig = {
     ...loadCatalogFixtures(),
+    keys: {
+      [VALID_KEY]: {
+        label: 'sk-or-v1-fak...000',
+        limit: 100,
+        limit_remaining: 74.5,
+        limit_reset: 'monthly',
+        usage: 25.5,
+        usage_daily: 0.5,
+        is_free_tier: false,
+      },
+    },
+    credits: { total_credits: 100.5, total_usage: 25.75 },
+    creditsRefused: false,
     failPaths: [],
     delayMs: 0,
     offline: false,
@@ -92,7 +123,7 @@ export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeO
 
     if (config.status !== undefined) return errorResponse(config.status, config.errorMetadata)
     if (config.failPaths.some((part) => path.includes(part))) return errorResponse(500)
-    const answer = route(config, request.method, path)
+    const answer = route(config, request, path)
     if (config.rawBody !== undefined && answer.status === 200) {
       return new Response(config.rawBody, { status: 200 })
     }
@@ -108,7 +139,18 @@ export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeO
   }
 }
 
-function route(config: FakeConfig, method: string, path: string): Response {
+function route(config: FakeConfig, request: Request, path: string): Response {
+  const method = request.method
+  if (method === 'GET' && (path === '/key' || path === '/credits')) {
+    const key = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? ''
+    const record = config.keys[key]
+    if (!record) return errorResponse(401, undefined, 'User not found.')
+    if (path === '/key') return json({ data: record })
+    if (config.creditsRefused) {
+      return errorResponse(403, undefined, 'Only management keys can perform this operation')
+    }
+    return json({ data: config.credits })
+  }
   if (method === 'GET' && path === '/images/models') return json({ data: config.models })
   const endpoints = /^\/images\/models\/(.+\/[^/]+)\/endpoints$/.exec(path)
   if (method === 'GET' && endpoints) {

@@ -137,19 +137,19 @@ gains its price summary.
 
 **Tests first**
 
-- [ ] T045 [P] [US3] Write `tests/core/settings-file.test.ts`: written with mode 0600, and an existing file is reset to 0600 (skipped on Windows); replaced atomically (temp + rename); reading a missing file returns nothing
-- [ ] T046 [US3] Extend `tests/helpers/fake-openrouter.ts` with `GET /key` (valid, 401) and `GET /credits` (200, 403)
-- [ ] T047 [US3] Write `tests/cli/auth.test.ts`: `auth --stdin` with a valid key saves it and returns `{"saved": true, "label"}`; an invalid key saves nothing and exits 3; without a TTY and without `--stdin` exits 2 before reading anything, with a message saying to pass `--stdin` (Story 2.3, FR-043, FR-047); with `OPENROUTER_API_KEY` set the key is saved with a warning that the env var takes precedence
-- [ ] T048 [US3] In `tests/cli/auth.test.ts`, on a fake TTY stdin (behavior only): input isn't echoed, Backspace removes a character, Enter finishes, Ctrl-C aborts without saving and exits 130
-- [ ] T049 [US3] In `tests/cli/auth.test.ts`: `auth status` reports `source` `env` (when both exist), `file` or `none` (with the other fields `null`, exit 0), and `valid`, `label`, `limit_usd`, `limit_remaining_usd`, `usage_usd`, `balance_usd` (`null` when `/credits` is refused) (FR-048); a rejected key is `valid: false` with exit 0; a network failure exits 7; `auth logout` returns `{"removed": true}` then `{"removed": false}`
-- [ ] T050 [US3] In `tests/cli/auth.test.ts`: across all auth commands the key never appears in stdout, stderr or any file other than the settings file (FR-049)
+- [x] T045 [P] [US3] Write `tests/core/settings-file.test.ts`: written with mode 0600, and an existing file is reset to 0600 (skipped on Windows); replaced atomically (temp + rename); reading a missing file returns nothing
+- [x] T046 [US3] Extend `tests/helpers/fake-openrouter.ts` with `GET /key` (valid, 401) and `GET /credits` (200, 403)
+- [x] T047 [US3] Write `tests/cli/auth.test.ts`: `auth --stdin` with a valid key saves it and returns `{"saved": true, "label"}`; an invalid key saves nothing and exits 3; without a TTY and without `--stdin` exits 2 before reading anything, with a message saying to pass `--stdin` (Story 2.3, FR-043, FR-047); with `OPENROUTER_API_KEY` set the key is saved with a warning that the env var takes precedence
+- [x] T048 [US3] In `tests/cli/auth.test.ts`, on a fake TTY stdin (behavior only): input isn't echoed, Backspace removes a character, Enter finishes, Ctrl-C aborts without saving and exits 130
+- [x] T049 [US3] In `tests/cli/auth.test.ts`: `auth status` reports `source` `env` (when both exist), `file` or `none` (with the other fields `null`, exit 0), and `valid`, `label`, `limit_usd`, `limit_remaining_usd`, `usage_usd`, `balance_usd` (`null` when `/credits` is refused) (FR-048); a rejected key is `valid: false` with exit 0; a network failure exits 7; `auth logout` returns `{"removed": true}` then `{"removed": false}`
+- [x] T050 [US3] In `tests/cli/auth.test.ts`: across all auth commands the key never appears in stdout, stderr or any file other than the settings file (FR-049)
 
 **Implementation**
 
-- [ ] T051 [P] [US3] Create `src/core/settings-file.ts`
-- [ ] T052 [P] [US3] Add `getKey()` and `getCredits()` to `src/core/openrouter.ts`
-- [ ] T053 [P] [US3] Create `src/cli/key.ts` (env var, then settings file) and `src/cli/hidden-input.ts`
-- [ ] T054 [US3] Create `src/cli/commands/auth.ts` (`auth`, `auth status`, `auth logout`) and register it
+- [x] T051 [P] [US3] Create `src/core/settings-file.ts`
+- [x] T052 [P] [US3] Add `getKey()` and `getCredits()` to `src/core/openrouter.ts`
+- [x] T053 [P] [US3] Create `src/cli/key.ts` (env var, then settings file) and `src/cli/hidden-input.ts`
+- [x] T054 [US3] Create `src/cli/commands/auth.ts` (`auth`, `auth status`, `auth logout`) and register it
 
 **Checkpoint**: Story 3's scenarios pass.
 

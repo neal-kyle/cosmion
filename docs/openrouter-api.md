@@ -201,7 +201,7 @@ the actual cost, which corrects both (below).
 
 ### `GET /key`: the current key
 
-Returns `limit` (spending limit or `null`), `limit_remaining`, `limit_reset`, `usage`,
+Returns, inside `data`, `limit` (spending limit or `null`), `limit_remaining`, `limit_reset`, `usage`,
 `usage_daily` / `_weekly` / `_monthly`, `is_free_tier`, `label`, `expires_at`. Live
 (2026-10-17) it also returns `is_management_key`, `budgets`, `effective_budget`, BYOK
 usage fields and more; `label` defaults to a masked form of the key
@@ -212,7 +212,8 @@ has a limit.
 
 ### `GET /credits`: account balance
 
-Returns `total_credits` and `total_usage` (balance = credits − usage). The docs list a
+Returns, inside `data` (checked live 2026-10-22, as for `GET /key`), `total_credits` and
+`total_usage` (balance = credits − usage). The docs list a
 403 "Only management keys can perform this operation", but an ordinary key gets 200
 (checked live 2026-10-17). Still unchecked for OAuth-issued keys (relevant once `cosmion auth login` exists).
 

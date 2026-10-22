@@ -12,8 +12,8 @@ export interface Context {
   env: Record<string, string | undefined>
   /** Tests can't safely change the process's folder, so commands use this one. */
   cwd: string
-  /** `isTTY` decides whether prompting is allowed (FR-043). */
-  stdin: NodeJS.ReadableStream & { isTTY?: boolean }
+  /** `isTTY` decides whether prompting is allowed (FR-043); `setRawMode` hides typing. */
+  stdin: NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?(mode: boolean): unknown }
   stdout: OutStream
   stderr: OutStream
   fetch: typeof fetch

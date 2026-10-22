@@ -5,6 +5,7 @@ import { commands as allCommands } from './commands/index.js'
 import type { Context } from './context.js'
 import type { CommandDefinition, OptionDefinition } from './define.js'
 import { exitCodes } from './exit-codes.js'
+import { InterruptedError } from './hidden-input.js'
 import { paint, printJson, printText, redactKey } from './output.js'
 
 type OnRun = (definition: CommandDefinition, input: Record<string, unknown>) => Promise<void>
@@ -148,7 +149,7 @@ function report(ctx: Context, error: unknown, json: boolean): number {
     if (error.exitCode === 0) return exitCodes.ok.code
     return printError(ctx, json, 'usage', usageMessage(error), false)
   }
-  if (ctx.signal.aborted) {
+  if (ctx.signal.aborted || error instanceof InterruptedError) {
     // Nothing on stdout, even with --json (FR-041).
     ctx.stderr.write('Interrupted.\n')
     return exitCodes.interrupted.code

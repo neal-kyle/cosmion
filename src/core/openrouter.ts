@@ -50,40 +50,63 @@ export interface OpenRouterOptions {
   signal?: AbortSignal
 }
 
+const keyInfoSchema = z.object({
+  data: z.object({
+    label: z.string().nullable(),
+    /** `null` when the key has no spending limit. */
+    limit: z.number().nullable(),
+    limit_remaining: z.number().nullable(),
+    usage: z.number(),
+  }),
+})
+export type KeyInfo = z.infer<typeof keyInfoSchema>['data']
+
+const creditsSchema = z.object({
+  data: z.object({ total_credits: z.number(), total_usage: z.number() }),
+})
+export type Credits = z.infer<typeof creditsSchema>['data']
+
 export interface OpenRouter {
   listImageModels(): Promise<ImageModel[]>
   getEndpoints(modelId: string): Promise<Endpoint[]>
+  /** The key's label, limit and usage; a rejected key is an `auth` error. */
+  getKey(key: string): Promise<KeyInfo>
+  /** The account's credits, or null when OpenRouter refuses them to this key (403). */
+  getCredits(key: string): Promise<Credits | null>
 }
 
 /** The OpenRouter calls Cosmion makes. The catalog calls need no key (FR-022). */
 export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
-  async function get<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-    const where = `GET ${path}`
-    let status: number
-    let text: string
+  async function send(path: string, key?: string): Promise<{ status: number; body: unknown }> {
+    const headers: Record<string, string> = { 'X-OpenRouter-Title': options.title }
+    if (key !== undefined) headers.Authorization = `Bearer ${key}`
     try {
       const response = await options.fetch(`${options.baseUrl}${path}`, {
-        headers: { 'X-OpenRouter-Title': options.title },
+        headers,
         signal: options.signal,
       })
-      status = response.status
-      text = await response.text()
+      return { status: response.status, body: parseJson(await response.text()) }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       throw new CosmionError('upstream', `Couldn't reach OpenRouter (${reason}).`)
     }
+  }
 
-    const body = parseJson(text)
+  function check<T>(path: string, status: number, body: unknown, schema: z.ZodType<T>): T {
     if (status < 200 || status >= 300) throw statusError(status, body)
-
     const result = schema.safeParse(body)
     if (!result.success) {
       throw new CosmionError(
         'upstream',
-        `OpenRouter sent an unexpected response for ${where}: ${z.prettifyError(result.error)}`,
+        `OpenRouter sent an unexpected response for GET ${path}: ${z.prettifyError(result.error)}`,
       )
     }
     return result.data
+  }
+
+  async function get<T>(path: string, schema: z.ZodType<T>, key?: string): Promise<T> {
+    const { status, body } = await send(path, key)
+    return check(path, status, body, schema)
   }
 
   return {
@@ -94,6 +117,15 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
       // The id is `author/slug`; the slash stays a slash.
       const id = modelId.split('/').map(encodeURIComponent).join('/')
       return (await get(`/images/models/${id}/endpoints`, endpointListSchema)).endpoints
+    },
+    async getKey(key) {
+      return (await get('/key', keyInfoSchema, key)).data
+    },
+    async getCredits(key) {
+      const { status, body } = await send('/credits', key)
+      // The docs list 403 for keys that aren't management keys; live, ordinary keys get 200.
+      if (status === 403) return null
+      return check('/credits', status, body, creditsSchema).data
     },
   }
 }
