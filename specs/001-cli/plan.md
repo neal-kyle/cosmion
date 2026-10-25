@@ -264,6 +264,8 @@ Details:
   can't be read, the file is kept, dimensions are `null` and a warning is printed. Only a
   failure to decode or write the file counts as "paid but not saved" (ledger entry with
   no images, exit 1).
+- **No images returned:** an empty `data` list isn't a malformed response: the entry is
+  written with the cost and no images, then the command exits 7, not retryable.
 - **Provider and generation id** from the `x-provider-name` and `x-generation-id`
   headers. `X-OpenRouter-Title: Cosmion` on every request (FR-055); `HTTP-Referer` is added
   once there's a public URL.

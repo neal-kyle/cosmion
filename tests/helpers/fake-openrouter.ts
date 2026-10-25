@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 
 const fixtures = join(import.meta.dirname, 'fixtures', 'catalog')
+
+/** The tiny 2×2 JPEG POST /images returns by default, base64. */
+export const TINY_JPEG = readFileSync(
+  join(import.meta.dirname, 'fixtures', 'images', 'tiny.jpg'),
+).toString('base64')
 
 export interface CatalogModel {
   id: string
@@ -65,6 +72,26 @@ export interface FakeConfig {
   offline: boolean
   /** Replaces the body of a successful answer, whatever it was (a malformed response). */
   rawBody?: string
+  /** How POST /images answers. */
+  images: ImagesConfig
+}
+
+/** How POST /images answers; the catalog and key calls are unaffected. */
+export interface ImagesConfig {
+  /** The `data` items. Default: one tiny JPEG per image asked for (`n`, or 1). */
+  data?: Record<string, unknown>[]
+  /** The `usage` object, or null to leave it out. */
+  usage: Record<string, unknown> | null
+  /** Response headers, e.g. `x-provider-name`. */
+  headers: Record<string, string>
+  /** Answer with this error status instead. */
+  status?: number
+  /** The `error.metadata` of that error. */
+  errorMetadata?: Record<string, unknown>
+  /** Wait this long (milliseconds) before answering. */
+  delayMs: number
+  /** Replaces the whole successful body (a malformed response). */
+  rawBody?: string
 }
 
 export interface FakeOpenRouter {
@@ -73,6 +100,8 @@ export interface FakeOpenRouter {
   requests: RecordedRequest[]
   /** Requests for the model list and the endpoint records. */
   catalogRequests(): RecordedRequest[]
+  /** The POST /images requests, their bodies parsed. */
+  imageRequests(): (RecordedRequest & { json: Record<string, unknown> })[]
   /** The most requests that were waiting for an answer at the same time. */
   maxInFlight(): number
 }
@@ -97,6 +126,11 @@ export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeO
     failPaths: [],
     delayMs: 0,
     offline: false,
+    images: {
+      usage: { prompt_tokens: 17, completion_tokens: 16384, total_tokens: 16401, cost: 0.04 },
+      headers: { 'x-provider-name': 'Seed', 'x-generation-id': 'gen-img-fake-0001' },
+      delayMs: 0,
+    },
     ...overrides,
   }
   const requests: RecordedRequest[] = []
@@ -123,7 +157,7 @@ export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeO
 
     if (config.status !== undefined) return errorResponse(config.status, config.errorMetadata)
     if (config.failPaths.some((part) => path.includes(part))) return errorResponse(500)
-    const answer = route(config, request, path)
+    const answer = await route(config, request, path, init?.signal ?? undefined)
     if (config.rawBody !== undefined && answer.status === 200) {
       return new Response(config.rawBody, { status: 200 })
     }
@@ -135,14 +169,57 @@ export function createFakeOpenRouter(overrides: Partial<FakeConfig> = {}): FakeO
     config,
     requests,
     catalogRequests: () => requests.filter((r) => r.path.startsWith('/images/models')),
+    imageRequests: () =>
+      requests
+        .filter((r) => r.method === 'POST' && r.path === '/images')
+        .map((r) => ({ ...r, json: JSON.parse(r.body ?? '{}') })),
     maxInFlight: () => maxInFlight,
   }
 }
 
-function route(config: FakeConfig, request: Request, path: string): Response {
+/**
+ * Serves the fake over HTTP on a random local port, for tests that run the real CLI in
+ * other processes (COSMION_TEST_OPENROUTER_URL). `url` is the API base, ending in `/api/v1`.
+ */
+export async function serveFakeOpenRouter(
+  fake: FakeOpenRouter,
+): Promise<{ url: string; close(): Promise<void> }> {
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = []
+    for await (const chunk of request) chunks.push(chunk as Buffer)
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (typeof value === 'string') headers.set(name, value)
+    }
+    const answer = await fake.fetch(`http://127.0.0.1${request.url}`, {
+      method: request.method,
+      headers,
+      body: chunks.length > 0 ? Buffer.concat(chunks).toString('utf8') : undefined,
+    })
+    response.writeHead(answer.status, Object.fromEntries(answer.headers))
+    response.end(await answer.text())
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${port}/api/v1`,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+  }
+}
+
+async function route(
+  config: FakeConfig,
+  request: Request,
+  path: string,
+  signal: AbortSignal | undefined,
+): Promise<Response> {
   const method = request.method
+  const key = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? ''
+  if (method === 'POST' && path === '/images') {
+    if (!config.keys[key]) return errorResponse(401, undefined, 'User not found.')
+    return images(config.images, JSON.parse(await request.text()), signal)
+  }
   if (method === 'GET' && (path === '/key' || path === '/credits')) {
-    const key = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? ''
     const record = config.keys[key]
     if (!record) return errorResponse(401, undefined, 'User not found.')
     if (path === '/key') return json({ data: record })
@@ -159,6 +236,23 @@ function route(config: FakeConfig, request: Request, path: string): Response {
     return errorResponse(404, undefined, `No image model found for "${endpoints[1]}"`)
   }
   return errorResponse(404, undefined, `The fake has no route for ${method} ${path}`)
+}
+
+async function images(
+  config: ImagesConfig,
+  body: { n?: number },
+  signal: AbortSignal | undefined,
+): Promise<Response> {
+  if (config.delayMs > 0) await sleep(config.delayMs, signal)
+  if (config.status !== undefined) return errorResponse(config.status, config.errorMetadata)
+  if (config.rawBody !== undefined) return new Response(config.rawBody, { status: 200 })
+  const data =
+    config.data ??
+    Array.from({ length: body.n ?? 1 }, () => ({ b64_json: TINY_JPEG, media_type: 'image/jpeg' }))
+  return new Response(
+    JSON.stringify({ created: 0, data, ...(config.usage ? { usage: config.usage } : {}) }),
+    { status: 200, headers: { 'content-type': 'application/json', ...config.headers } },
+  )
 }
 
 function json(body: unknown): Response {

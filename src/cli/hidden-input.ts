@@ -1,9 +1,12 @@
 import type { Context } from './context.js'
 
-/** Ctrl-C while typing. In raw mode it arrives as a character, not as SIGINT. */
+/**
+ * Ctrl-C while typing (in raw mode it arrives as a character, not as SIGINT), or during a
+ * generation. The message is printed on stderr; exit 130.
+ */
 export class InterruptedError extends Error {
-  constructor() {
-    super('Interrupted')
+  constructor(message = 'Interrupted.') {
+    super(message)
     this.name = 'InterruptedError'
   }
 }

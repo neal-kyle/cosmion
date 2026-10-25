@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
-import { findNewestMatch, readLedger } from '../../src/cli/ledger.js'
+import {
+  appendEntry,
+  findNewestMatch,
+  type LedgerEntry,
+  ledgerFile,
+  readLedger,
+} from '../../src/cli/ledger.js'
 import { ledgerEntry, writeLedger } from '../helpers/ledger.js'
 import { createTestContext } from '../helpers/run-cli.js'
 
@@ -96,5 +103,42 @@ describe('finding the newest entry with the same model and settings', () => {
     expect(findNewestMatch(all, model, { aspect_ratio: '4:3' }, 0)).toBeUndefined()
     expect(findNewestMatch(all, model, {}, 0)).toBeUndefined()
     expect(findNewestMatch(all, 'nobody/nothing', { aspect_ratio: '1:1' }, 0)).toBeUndefined()
+  })
+})
+
+describe('appending (FR-051)', () => {
+  const entry = (id: string) => ledgerEntry({ id }) as LedgerEntry
+
+  test('creates the data folder and the file, one line per entry', async () => {
+    const t = createTestContext()
+    await appendEntry(t.ctx, entry('aaaaaaa1'))
+    await appendEntry(t.ctx, entry('aaaaaaa2'))
+    const text = readFileSync(ledgerFile(t.ctx.env), 'utf8')
+    expect(text.endsWith('\n')).toBe(true)
+    expect(
+      text
+        .trimEnd()
+        .split('\n')
+        .map((line) => JSON.parse(line).id),
+    ).toEqual(['aaaaaaa1', 'aaaaaaa2'])
+  })
+
+  test('adds to the end of an existing ledger, leaving its lines as they were', async () => {
+    const t = createTestContext()
+    const file = writeLedger(t.home, [entry('aaaaaaa1'), 'a cut-off line'])
+    const before = readFileSync(file, 'utf8')
+    await appendEntry(t.ctx, entry('aaaaaaa2'))
+    const after = readFileSync(file, 'utf8')
+    expect(after.startsWith(before)).toBe(true)
+    expect(JSON.parse(after.slice(before.length))).toEqual(entry('aaaaaaa2'))
+  })
+
+  test('many appends at once each land as one complete line', async () => {
+    const t = createTestContext()
+    const ids = Array.from({ length: 50 }, (_, i) => `aaaa${String(i).padStart(4, '0')}`)
+    await Promise.all(ids.map((id) => appendEntry(t.ctx, entry(id))))
+    const entries = await readLedger(t.ctx)
+    expect(entries.map((e) => e.id).sort()).toEqual(ids)
+    expect(t.stderr()).toBe('')
   })
 })

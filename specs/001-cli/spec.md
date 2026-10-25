@@ -51,6 +51,12 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 - Q: `partial` is listed as an `error.code`, but exit 8 never prints an error. Keep it? → A: No, removed; exit 8 is unchanged (FR-040).
 - Q: Does `batch --dry-run` need `--budget` or `--no-budget`? → A: No; it spends nothing (FR-071).
 
+### Session 2026-10-25
+
+- Q: A response can be charged and return no images. Record it? → A: Yes: a ledger entry with the cost and no images, exit 7, not retryable. The ledger should show everything spent; no extra field says why (the error message does).
+- Q: With `--count 3` and one image back, is it named `cosmion-<id>.<ext>` or `cosmion-<id>-1.<ext>`? → A: `-1`: names follow the number asked for, the paths checked before sending.
+- Q: Is the prompt sent exactly as given? → A: No: spaces and line breaks at its start and end are removed, so stdin's final newline isn't sent and a blank prompt counts as empty (FR-001).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Generate an image into my project (Priority: P1)
@@ -358,7 +364,12 @@ the test suite against the shape it declares.
   the CLI exits 1 explaining what happened. All path checks happen *before* the request
   (FR-012) so this only happens on failures like a full disk.
 - **Fewer images than requested:** `n` is an upper bound; the CLI saves what comes back
-  and the JSON shows how many.
+  and the JSON shows how many. Names follow the number asked for, since those are the
+  paths checked before sending: `--count 3` with one image back saves
+  `cosmion-<id>-1.<ext>` (or `<stem>-1<ext>` with `--out`).
+- **No images returned:** the ledger entry is still written with the cost and no images,
+  so the ledger shows everything spent, and the CLI exits 7 with `"retryable": false`
+  (retrying could pay twice), saying the request was charged and returned nothing.
 - **Generation times out or is interrupted (Ctrl-C):** no ledger entry; the message says
   the provider may still have charged and to check openrouter.ai activity. Ctrl-C exits
   130; a timeout exits 7 with `"retryable": false`, since retrying could pay twice.
@@ -394,7 +405,8 @@ the test suite against the shape it declares.
 **Generating: `cosmion gen <prompt> [--model <id>] [options]`**
 
 - **FR-001**: `gen` MUST take the prompt as its argument, or read it from stdin when the
-  argument is `-`. An empty prompt exits 2.
+  argument is `-`. Spaces and line breaks at its start and end are removed (stdin ends
+  with a newline); a prompt with nothing left exits 2.
 - **FR-002**: The model MUST come from `--model`/`-m <id>`, otherwise the `COSMION_MODEL`
   env var; with neither, exit 2 suggesting `cosmion models`. The same applies to `price` and
   to `batch` rows without a `model` value.

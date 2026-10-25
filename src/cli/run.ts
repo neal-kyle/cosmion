@@ -151,7 +151,7 @@ function report(ctx: Context, error: unknown, json: boolean): number {
   }
   if (ctx.signal.aborted || error instanceof InterruptedError) {
     // Nothing on stdout, even with --json (FR-041).
-    ctx.stderr.write('Interrupted.\n')
+    ctx.stderr.write(`${error instanceof InterruptedError ? error.message : 'Interrupted.'}\n`)
     return exitCodes.interrupted.code
   }
   if (error instanceof CosmionError) {

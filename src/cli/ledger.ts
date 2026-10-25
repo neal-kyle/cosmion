@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, open, readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { CosmionError } from '../core/errors.js'
 import { type Settings, sameSettingsKey } from '../core/options.js'
@@ -49,6 +49,21 @@ export type LedgerEntry = z.infer<typeof ledgerEntrySchema>
 
 export function ledgerFile(env: Context['env']): string {
   return join(resolvePaths(env).data, 'ledger.jsonl')
+}
+
+/**
+ * Adds one entry at the end of the ledger (FR-051). The whole line goes in one `write` to
+ * a file opened for appending, so entries from processes running at once never mix.
+ */
+export async function appendEntry(ctx: Context, entry: LedgerEntry): Promise<void> {
+  const file = ledgerFile(ctx.env)
+  await mkdir(dirname(file), { recursive: true })
+  const handle = await open(file, 'a')
+  try {
+    await handle.write(`${JSON.stringify(entry)}\n`)
+  } finally {
+    await handle.close()
+  }
 }
 
 /**

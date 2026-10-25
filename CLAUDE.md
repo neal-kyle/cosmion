@@ -25,15 +25,16 @@ Where things are:
 | Command | Does |
 |---------|------|
 | `npm run build` | `tsc` → `dist/` (`tsconfig.build.json`, `src/` only) |
-| `npm test` | Vitest, all tests |
+| `npm test` | Builds first (`pretest`), then Vitest, all tests. `tests/concurrency.test.ts` runs `dist/`, so a bare `npx vitest` needs a fresh build |
 | `npm run lint` | Biome check, then `tsc --noEmit` over source and tests (`tsconfig.json`) |
 | `npm run format` | Biome formats the code |
 | `node dist/cli/main.js …` | Run the built CLI (or `npm link` once, then `cosmion …`) |
 
 Each phase ends with lint, test and build passing.
 
-`COSMION_TEST_OPENROUTER_URL=<url>` points the built CLI at a fake OpenRouter (FR-058). It's
-test-only: keep it out of the README and `SKILL.md`.
+`COSMION_TEST_OPENROUTER_URL=<url>` points the built CLI at a fake OpenRouter (FR-058);
+`serveFakeOpenRouter()` in `tests/helpers/fake-openrouter.ts` serves one. It's test-only:
+keep it out of the README and `SKILL.md`.
 
 Features go through **Spec Kit** (lean preset):
 
