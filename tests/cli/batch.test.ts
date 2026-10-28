@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { createFakeOpenRouter, VALID_KEY } from '../helpers/fake-openrouter.js'
 import { createTestContext, type RunCliOptions, runCli } from '../helpers/run-cli.js'
@@ -282,7 +282,7 @@ describe('defaults and options', () => {
     const t = setup()
     const file = t.file('jobs.csv', `prompt,model,out\np1,${SEEDREAM},\np2,${SEEDREAM},mine.jpg\n`)
     const report = (await t.batch([file, '--out', 'pics', '--no-budget', '--json'])).json as Report
-    expect(report.rows[0]?.paths[0]).toMatch(new RegExp(`^${join(t.cwd, 'pics')}`))
+    expect(dirname(report.rows[0]?.paths[0] as string)).toBe(join(t.cwd, 'pics'))
     expect(report.rows[1]?.paths).toEqual([join(t.cwd, 'mine.jpg')])
     expect(readdirSync(join(t.cwd, 'pics'))).toHaveLength(1)
   })
