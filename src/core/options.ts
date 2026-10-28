@@ -78,6 +78,21 @@ function supportedFlags(model: ImageModel): string {
 }
 
 /**
+ * The gen options that give these settings: the reverse of toSettings, for re-sending a
+ * past request (FR-085). A field that is no gen option is a usage error.
+ */
+export function toOptions(settings: Settings): GenOptions {
+  const options: GenOptions = {}
+  const names = Object.entries(SETTING_FIELDS)
+  for (const [field, value] of Object.entries(settings)) {
+    const name = names.find(([, sent]) => sent === field)?.[0] as OptionName | undefined
+    if (!name) throw new CosmionError('usage', `The setting "${field}" isn't one Cosmion can send.`)
+    options[name] = value
+  }
+  return options
+}
+
+/**
  * A seed for a model that takes one, so `regen` can repeat the generation (FR-004):
  * within the model's range, or 0–2,147,483,647. Undefined for a model without a seed.
  */

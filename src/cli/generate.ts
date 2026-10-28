@@ -4,7 +4,13 @@ import type { CatalogModel } from '../core/catalog.js'
 import { CosmionError, type ErrorCode } from '../core/errors.js'
 import { newId } from '../core/ids.js'
 import { createOpenRouterClient, type GeneratedImages } from '../core/openrouter.js'
-import { type GenOptions, randomSeed, type Settings, toSettings } from '../core/options.js'
+import {
+  type GenOptions,
+  randomSeed,
+  type Settings,
+  toOptions,
+  toSettings,
+} from '../core/options.js'
 import { loadModel } from './catalog-cache.js'
 import type { Context } from './context.js'
 import { resolveModelId } from './gen-options.js'
@@ -25,6 +31,11 @@ export interface GenerationRequest {
   refs: readonly string[]
   out: string | undefined
   force: boolean
+  /**
+   * regen: send exactly these settings (FR-085), still checked against the model, with
+   * no random seed and no format implied by `out`. `options` is then ignored.
+   */
+  settings?: Settings
 }
 
 /** A request that passed every check (FR-012), ready to send. */
@@ -40,6 +51,8 @@ export interface PreparedGeneration {
   force: boolean
   /** Set for a batch row: recorded in the ledger entry (FR-074). */
   batch?: { id: string; row: number }
+  /** Set by regen: the entry this one repeats. */
+  regenOf?: string
 }
 
 /** A failure after OpenRouter answered: the money is spent and `entry` is in the ledger. */
@@ -84,9 +97,10 @@ export async function prepare(
   }
 
   const { model } = await loadModel(ctx, modelId)
-  const settings = toSettings(model, request.options)
+  const exact = request.settings !== undefined
+  const settings = toSettings(model, exact ? toOptions(request.settings ?? {}) : request.options)
   // FR-004: a seed for every model that takes one, so regen can repeat the generation.
-  if (settings.seed === undefined) {
+  if (!exact && settings.seed === undefined) {
     const seed = randomSeed(model)
     if (seed !== undefined) settings.seed = seed
   }
@@ -102,6 +116,7 @@ export async function prepare(
   const implied = paths.exact === null ? undefined : formatOfPath(paths.exact)
   const formats = model.supported_parameters.output_format
   if (
+    !exact &&
     implied &&
     settings.output_format === undefined &&
     formats?.type === 'enum' &&
@@ -190,7 +205,7 @@ export async function execute(ctx: Context, prepared: PreparedGeneration): Promi
     generation_id: result.generationId,
     batch_id: prepared.batch?.id ?? null,
     row: prepared.batch?.row ?? null,
-    regen_of: null,
+    regen_of: prepared.regenOf ?? null,
   }
   let recorded = true
   try {

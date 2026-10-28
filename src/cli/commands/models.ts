@@ -6,6 +6,7 @@ import { loadCatalog, loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
 import { findNewestMatch, readLedger } from '../ledger.js'
 import { table } from '../output.js'
+import { modelsRank } from './models-rank.js'
 import { priceSchema, priceText } from './price.js'
 
 const listedModelSchema = z.strictObject({
@@ -54,6 +55,7 @@ export const models = defineCommand({
       description: 'Fetch the catalog again even if the saved copy is recent',
     },
   ],
+  subcommands: [modelsRank],
   output: z.union([listSchema, detailSchema]),
   async run(input, ctx) {
     if (input.id === undefined) {

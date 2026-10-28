@@ -231,15 +231,15 @@ real money: test the scheduler exhaustively before wiring it up.
 
 **Tests first**
 
-- [ ] T081 [P] [US9] Write `tests/cli/regen.test.ts`: OpenRouter receives the original model, prompt, `settings` (with seed) and references exactly, and the new entry has `regen_of` (Story 9.1, FR-085); `--out` and `--force` follow `gen`'s rules, default the cwd; a missing local reference exits 2 naming it, with nothing sent (Story 9.2); a removed model exits 5; settings the model no longer supports exit 2 (FR-086); an entry without a seed re-runs with a warning on stderr that the result won't be identical; an unknown id exits 5
-- [ ] T082 [P] [US8] Write `tests/cli/usage.test.ts` with `TZ` set (including a non-UTC zone): default last 30 days grouped by model (Story 8.1); `--since 2026-10-01 --by day` lists every day from that date, including empty days (Story 8.2); `7d`/`30d` spans; `--until` includes that whole day; `null` costs counted in `unknown_cost_count`, not as $0 (Story 8.3, FR-081); an invalid date exits 2
-- [ ] T083 [P] [US10] Write `tests/cli/models-rank.test.ts`: only models that support every passed option and value and at least `--refs` references (Story 10.1, 10.2, FR-090); sorted by price for those options, `at_most` and `estimate` by their number, `unknown` last; JSON `{"settings", "models": [{"id", "name", "price"}]}`
+- [x] T081 [P] [US9] Write `tests/cli/regen.test.ts`: OpenRouter receives the original model, prompt, `settings` (with seed) and references exactly, and the new entry has `regen_of` (Story 9.1, FR-085); `--out` and `--force` follow `gen`'s rules, default the cwd; a missing local reference exits 2 naming it, with nothing sent (Story 9.2); a removed model exits 5; settings the model no longer supports exit 2 (FR-086); an entry without a seed re-runs with a warning on stderr that the result won't be identical; an unknown id exits 5
+- [x] T082 [P] [US8] Write `tests/cli/usage.test.ts` with `TZ` set (including a non-UTC zone): default last 30 days grouped by model (Story 8.1); `--since 2026-10-01 --by day` lists every day from that date, including empty days (Story 8.2); `7d`/`30d` spans; `--until` includes that whole day; `null` costs counted in `unknown_cost_count`, not as $0 (Story 8.3, FR-081); an invalid date exits 2
+- [x] T083 [P] [US10] Write `tests/cli/models-rank.test.ts`: only models that support every passed option and value and at least `--refs` references (Story 10.1, 10.2, FR-090); sorted by price for those options, `at_most` and `estimate` by their number, `unknown` last; JSON `{"settings", "models": [{"id", "name", "price"}]}`
 
 **Implementation**
 
-- [ ] T084 [P] [US9] Create `src/cli/commands/regen.ts` (reuses `generate.ts`) and register it
-- [ ] T085 [P] [US8] Create `src/cli/commands/usage.ts` and register it
-- [ ] T086 [P] [US10] Create `src/cli/commands/models-rank.ts` and register it as the `rank` subcommand of `models`
+- [x] T084 [P] [US9] Create `src/cli/commands/regen.ts` (reuses `generate.ts`) and register it
+- [x] T085 [P] [US8] Create `src/cli/commands/usage.ts` and register it
+- [x] T086 [P] [US10] Create `src/cli/commands/models-rank.ts` and register it as the `rank` subcommand of `models`
 
 **Checkpoint**: Stories 8, 9 and 10 pass.
 
