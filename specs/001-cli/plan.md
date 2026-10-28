@@ -174,7 +174,8 @@ export const price = defineCommand({
   key, if it occurs, in every message before writing it. Belt and braces for an error
   body that echoes a header.
 - Exit 8 isn't an error: `batch` and `doctor` return their normal result with
-  `exitCode: 8`.
+  `exitCode: 8`. A `batch` stopped by an auth or credits error returns its report with
+  `exitCode: 3` or `4` (FR-078).
 - Exit 130 (Ctrl-C) prints nothing on stdout, even with `--json`; the message goes to
   stderr (FR-041).
 - **Prices in text** (`formatUsd`, FR-037): under $1, three significant figures without

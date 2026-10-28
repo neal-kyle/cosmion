@@ -536,7 +536,9 @@ the test suite against the shape it declares.
   The one exception is an interrupted command (Ctrl-C, exit 130), which prints nothing on
   stdout.
   Exit 8 is not a failure of the command: it prints the command's normal result (the
-  `batch` report, the `doctor` checks), whose per-item statuses say what failed.
+  `batch` report, the `doctor` checks), whose per-item statuses say what failed. A
+  `batch` stopped by an auth or credits error (exit 3 or 4, FR-078) also prints its
+  report, whose `stopped` holds that error.
 - **FR-042**: Logs, progress and warnings MUST go to stderr only. Color and progress
   animation only when the stream is a TTY and `NO_COLOR` isn't set.
 - **FR-043**: The CLI MUST never prompt when stdin isn't a TTY.

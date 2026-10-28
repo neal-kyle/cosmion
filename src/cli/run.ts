@@ -110,6 +110,8 @@ function addCommand(parent: Command, definition: CommandDefinition, onRun: OnRun
 function toOption(definition: OptionDefinition): Option {
   const flags = definition.alias ? `${definition.alias}, ${definition.flag}` : definition.flag
   const option = new Option(flags, definition.description)
+  // A `--no-x` flag is an option of its own, not `--x` switched off (batch's `--no-budget`).
+  option.negate = false
   // choices() lists the values in --help; the parser below checks them.
   if (definition.values) option.choices(definition.values)
   if (definition.required) option.makeOptionMandatory()

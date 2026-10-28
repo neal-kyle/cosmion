@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { imageSize } from 'image-size'
 import type { CatalogModel } from '../core/catalog.js'
-import { CosmionError } from '../core/errors.js'
+import { CosmionError, type ErrorCode } from '../core/errors.js'
 import { newId } from '../core/ids.js'
 import { createOpenRouterClient, type GeneratedImages } from '../core/openrouter.js'
 import { type GenOptions, randomSeed, type Settings, toSettings } from '../core/options.js'
@@ -38,6 +38,24 @@ export interface PreparedGeneration {
   refs: Ref[]
   paths: OutPaths
   force: boolean
+  /** Set for a batch row: recorded in the ledger entry (FR-074). */
+  batch?: { id: string; row: number }
+}
+
+/** A failure after OpenRouter answered: the money is spent and `entry` is in the ledger. */
+export class ChargedError extends CosmionError {
+  readonly entry: LedgerEntry
+
+  constructor(
+    code: ErrorCode,
+    message: string,
+    entry: LedgerEntry,
+    options: { retryable?: boolean } = {},
+  ) {
+    super(code, message, options)
+    this.name = 'ChargedError'
+    this.entry = entry
+  }
 }
 
 const MAY_BE_CHARGED =
@@ -46,11 +64,13 @@ const MAY_BE_CHARGED =
 /**
  * Checks everything that can be checked before spending (FR-012): the prompt, a key, the
  * model, its options, the refs and the output paths. Sends nothing and writes nothing
- * (a catalog refresh aside).
+ * (a catalog refresh aside). `takenIds` saves reading the ledger for every batch row;
+ * the new id is added to it.
  */
 export async function prepare(
   ctx: Context,
   request: GenerationRequest,
+  takenIds?: Set<string>,
 ): Promise<PreparedGeneration> {
   const prompt = request.prompt.trim()
   if (prompt === '') throw new CosmionError('usage', 'The prompt is empty.')
@@ -72,8 +92,9 @@ export async function prepare(
   }
   const refs = await readRefs(ctx, model, request.refs)
 
-  const taken = new Set((await readLedger(ctx)).map((entry) => entry.id))
+  const taken = takenIds ?? new Set((await readLedger(ctx)).map((entry) => entry.id))
   const id = newId((candidate) => taken.has(candidate))
+  taken.add(id)
   const count = typeof settings.n === 'number' ? settings.n : 1
   const paths = await planOutPaths(ctx, { id, out: request.out, count, force: request.force })
 
@@ -167,8 +188,8 @@ export async function execute(ctx: Context, prepared: PreparedGeneration): Promi
     usage: result.usage,
     provider: result.provider,
     generation_id: result.generationId,
-    batch_id: null,
-    row: null,
+    batch_id: prepared.batch?.id ?? null,
+    row: prepared.batch?.row ?? null,
     regen_of: null,
   }
   let recorded = true
@@ -183,16 +204,18 @@ export async function execute(ctx: Context, prepared: PreparedGeneration): Promi
   const cost = result.costUsd === null ? 'an unknown amount' : formatUsd(result.costUsd)
   if (result.images.length === 0) {
     // Not retryable: trying again could be charged again.
-    throw new CosmionError(
+    throw new ChargedError(
       'upstream',
       `OpenRouter charged ${cost} for generation ${id} but returned no images.${recorded ? ' It is recorded in the ledger.' : ''}`,
+      entry,
       { retryable: false },
     )
   }
   if (failures.length > 0) {
-    throw new CosmionError(
+    throw new ChargedError(
       'internal',
       `OpenRouter charged ${cost} for generation ${id}, but Cosmion couldn't save ${failures.join(', ')}.`,
+      entry,
     )
   }
   return entry

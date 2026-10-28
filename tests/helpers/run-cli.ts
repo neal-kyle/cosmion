@@ -41,7 +41,8 @@ export interface RunCliResult {
 /**
  * Runs the CLI in-process with a temp COSMION_HOME and cwd. With `--json` it checks
  * stdout is exactly one JSON object matching the command's `output` schema, or the error
- * schema with the exit code FR-040 gives that error, or nothing at all for exit 130.
+ * schema with the exit code FR-040 gives that error, or nothing at all for exit 130. A
+ * result with an error's exit code (a stopped batch) must still match the output schema.
  */
 export async function runCli(args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   const test = createTestContext(options)
@@ -123,7 +124,11 @@ function checkJson(
     throw new Error(`--json stdout isn't a JSON object:\n${stdout}`)
   }
 
-  if (exitCode === exitCodes.ok.code || exitCode === exitCodes.partial.code) {
+  // A result rather than an error: exit 0 or 8, or a batch report stopped by an auth or
+  // credits error (exit 3 or 4, FR-078).
+  const stoppedBatch =
+    (exitCode === exitCodes.auth.code || exitCode === exitCodes.credits.code) && !('error' in json)
+  if (exitCode === exitCodes.ok.code || exitCode === exitCodes.partial.code || stoppedBatch) {
     const command = findCommand(args, commands)
     if (!command?.output) throw new Error(`No command with an output schema for: ${args.join(' ')}`)
     command.output.parse(json)

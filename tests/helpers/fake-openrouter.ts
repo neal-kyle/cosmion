@@ -92,6 +92,8 @@ export interface ImagesConfig {
   delayMs: number
   /** Replaces the whole successful body (a malformed response). */
   rawBody?: string
+  /** Different answers for requests with these prompts, e.g. one batch row failing. */
+  byPrompt?: Record<string, Partial<Omit<ImagesConfig, 'byPrompt'>>>
 }
 
 export interface FakeOpenRouter {
@@ -239,10 +241,11 @@ async function route(
 }
 
 async function images(
-  config: ImagesConfig,
-  body: { n?: number },
+  base: ImagesConfig,
+  body: { n?: number; prompt?: string },
   signal: AbortSignal | undefined,
 ): Promise<Response> {
+  const config = { ...base, ...base.byPrompt?.[body.prompt ?? ''] }
   if (config.delayMs > 0) await sleep(config.delayMs, signal)
   if (config.status !== undefined) return errorResponse(config.status, config.errorMetadata)
   if (config.rawBody !== undefined) return new Response(config.rawBody, { status: 200 })

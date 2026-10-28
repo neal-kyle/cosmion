@@ -23,10 +23,13 @@ export interface OptionDefinition {
   readonly description: string
 }
 
-/** What `run` returns. Exit 8 isn't an error: the result is printed as usual (FR-041). */
+/**
+ * What `run` returns. Exit 8 isn't an error: the result is printed as usual (FR-041). A
+ * batch stopped by an auth or credits error exits 3 or 4 with its report (FR-078).
+ */
 export interface CommandResult<Output> {
   data: Output
-  exitCode?: 8
+  exitCode?: 3 | 4 | 8
 }
 
 /** A command as `run.ts` and `schema` see it. */
