@@ -190,13 +190,13 @@ does its main job.
 
 **Tests first**
 
-- [ ] T069 [US5] Write `tests/cli/history.test.ts`: with 50 seeded entries, the 20 newest, newest first, with id, time, model, cost, shortened prompt and path in text mode (Story 5.1); `--limit` and `--model`; JSON `{"entries": [...]}` (FR-053); a cut-off last line is skipped with a warning; 10,000 entries in under 1 second, timing only the command, with the ledger written before the timer starts (SC-005)
-- [ ] T070 [P] [US5] Write `tests/cli/show.test.ts`: the full entry with `"exists": true|false` on each image (Story 5.2, FR-054); an unknown id exits 5 (Story 5.3)
+- [x] T069 [US5] Write `tests/cli/history.test.ts`: with 50 seeded entries, the 20 newest, newest first, with id, time, model, cost, shortened prompt and path in text mode (Story 5.1); `--limit` and `--model`; JSON `{"entries": [...]}` (FR-053); a cut-off last line is skipped with a warning; 10,000 entries in under 1 second, timing only the command, with the ledger written before the timer starts (SC-005)
+- [x] T070 [P] [US5] Write `tests/cli/show.test.ts`: the full entry with `"exists": true|false` on each image (Story 5.2, FR-054); an unknown id exits 5 (Story 5.3)
 
 **Implementation**
 
-- [ ] T071 [P] [US5] Create `src/cli/commands/history.ts` and register it
-- [ ] T072 [P] [US5] Create `src/cli/commands/show.ts` and register it
+- [x] T071 [P] [US5] Create `src/cli/commands/history.ts` and register it
+- [x] T072 [P] [US5] Create `src/cli/commands/show.ts` and register it
 
 **Checkpoint**: Story 5 scenarios pass.
 

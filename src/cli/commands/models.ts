@@ -5,6 +5,7 @@ import { price as priceOf } from '../../core/pricing.js'
 import { loadCatalog, loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
 import { findNewestMatch, readLedger } from '../ledger.js'
+import { table } from '../output.js'
 import { priceSchema, priceText } from './price.js'
 
 const listedModelSchema = z.strictObject({
@@ -139,23 +140,4 @@ function describeOption(option: Parameter): string {
 /** A price without the exponent JavaScript uses for small numbers (3e-7 → 0.0000003). */
 function plainNumber(value: number): string {
   return value.toFixed(12).replace(/0+$/, '').replace(/\.$/, '')
-}
-
-/** Left-aligned columns, two spaces apart. */
-function table(rows: string[][]): string {
-  const widths: number[] = []
-  for (const row of rows) {
-    row.forEach((cell, column) => {
-      widths[column] = Math.max(widths[column] ?? 0, cell.length)
-    })
-  }
-  return rows
-    .map((row) =>
-      row
-        .map((cell, column) =>
-          column === row.length - 1 ? cell : cell.padEnd(widths[column] ?? 0),
-        )
-        .join('  '),
-    )
-    .join('\n')
 }

@@ -88,3 +88,30 @@ export function redactKey(stream: OutStream, env: Context['env']): OutStream {
     isTTY: stream.isTTY,
   }
 }
+
+/** Left-aligned columns, two spaces apart. */
+export function table(rows: string[][]): string {
+  const widths: number[] = []
+  for (const row of rows) {
+    row.forEach((cell, column) => {
+      widths[column] = Math.max(widths[column] ?? 0, cell.length)
+    })
+  }
+  return rows
+    .map((row) =>
+      row
+        .map((cell, column) =>
+          column === row.length - 1 ? cell : cell.padEnd(widths[column] ?? 0),
+        )
+        .join('  '),
+    )
+    .join('\n')
+}
+
+/** An ISO time as local `2026-10-17 14:03`, for text output. JSON keeps the ISO string. */
+export function formatTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`
+}
