@@ -71,20 +71,33 @@ export async function appendEntry(ctx: Context, entry: LedgerEntry): Promise<voi
  * crash) or has an unknown `v` is skipped with a warning on stderr (FR-052).
  */
 export async function readLedger(ctx: Context): Promise<LedgerEntry[]> {
+  const { file, entries, skipped } = await readLedgerLines(ctx)
+  for (const { line, why } of skipped) warn(ctx, `Skipped line ${line} of ${file}: ${why}`)
+  return entries
+}
+
+/** The ledger's entries and, without warning about them, the lines that were skipped. */
+export async function readLedgerLines(ctx: Context): Promise<{
+  file: string
+  entries: LedgerEntry[]
+  skipped: { line: number; why: string }[]
+}> {
   const file = ledgerFile(ctx.env)
   let text: string
   try {
     text = await readFile(file, 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return { file, entries: [], skipped: [] }
     const reason = error instanceof Error ? error.message : String(error)
     throw new CosmionError('internal', `Couldn't read the ledger at ${file} (${reason}).`)
   }
 
   const entries: LedgerEntry[] = []
+  const skipped: { line: number; why: string }[] = []
   text.split('\n').forEach((line, index) => {
     if (line.trim() === '') return
-    const skip = (why: string) => warn(ctx, `Skipped line ${index + 1} of ${file}: ${why}`)
+    const skip = (why: string) => skipped.push({ line: index + 1, why })
     let value: unknown
     try {
       value = JSON.parse(line)
@@ -101,7 +114,7 @@ export async function readLedger(ctx: Context): Promise<LedgerEntry[]> {
     if (parsed.success) entries.push(parsed.data)
     else skip("it isn't a valid ledger entry.")
   })
-  return entries
+  return { file, entries, skipped }
 }
 
 /** The newest entry with this model and the same settings (FR-034), if any. */

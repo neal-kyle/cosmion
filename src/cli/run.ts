@@ -1,12 +1,12 @@
-import { readFileSync } from 'node:fs'
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander'
 import { CosmionError, type ErrorCode } from '../core/errors.js'
 import { commands as allCommands } from './commands/index.js'
 import type { Context } from './context.js'
-import type { CommandDefinition, OptionDefinition } from './define.js'
+import { type CommandDefinition, jsonOption, type OptionDefinition } from './define.js'
 import { exitCodes } from './exit-codes.js'
 import { InterruptedError } from './hidden-input.js'
 import { paint, printJson, printText, redactKey } from './output.js'
+import { readVersion } from './version.js'
 
 type OnRun = (definition: CommandDefinition, input: Record<string, unknown>) => Promise<void>
 
@@ -53,7 +53,7 @@ function buildProgram(commands: readonly CommandDefinition[], ctx: Context, onRu
     .version(readVersion(), '-V, --version', 'Print the version')
     .helpOption('-h, --help', 'Show help')
     .helpCommand('help [command]', 'Show help for a command')
-    .option('--json', jsonDescription)
+    .option(jsonOption.flag, jsonOption.description)
     .addHelpText('after', '\n`csn` is the short form of `cosmion`, e.g. `csn --help`.')
     .exitOverride()
     .configureOutput({
@@ -68,14 +68,6 @@ function buildProgram(commands: readonly CommandDefinition[], ctx: Context, onRu
   return program
 }
 
-const jsonDescription = 'Print the result as one JSON object'
-
-function readVersion(): string {
-  // ../../package.json from both src/cli (tests) and dist/cli (the built CLI).
-  const packageJson = new URL('../../package.json', import.meta.url)
-  return JSON.parse(readFileSync(packageJson, 'utf8')).version
-}
-
 function addCommand(parent: Command, definition: CommandDefinition, onRun: OnRun): void {
   const command = parent.command(definition.name).description(definition.summary)
   for (const arg of definition.args) {
@@ -86,7 +78,7 @@ function addCommand(parent: Command, definition: CommandDefinition, onRun: OnRun
     option: toOption(option),
   }))
   for (const { option } of options) command.addOption(option)
-  command.option('--json', jsonDescription)
+  command.option(jsonOption.flag, jsonOption.description)
 
   if (definition.run) {
     command.action(async () => {

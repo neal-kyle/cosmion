@@ -21,6 +21,8 @@ export interface LoadedCatalog {
   catalog: Catalog
   /** A refresh was attempted during this call, whether or not it worked. */
   refreshTried: boolean
+  /** The refresh failed, so this is the older cached copy. */
+  stale: boolean
 }
 
 /**
@@ -34,7 +36,8 @@ export async function loadCatalog(
 ): Promise<LoadedCatalog> {
   const file = join(resolvePaths(ctx.env).cache, 'catalog.json')
   const cached = await readCache(file)
-  if (cached && !options.refresh && isFresh(cached)) return { catalog: cached, refreshTried: false }
+  if (cached && !options.refresh && isFresh(cached))
+    return { catalog: cached, refreshTried: false, stale: false }
 
   let fresh: Catalog
   try {
@@ -46,10 +49,10 @@ export async function loadCatalog(
       ctx,
       `Couldn't refresh the model catalog (${error.message}) Using the copy fetched at ${cached.fetched_at}.`,
     )
-    return { catalog: cached, refreshTried: true }
+    return { catalog: cached, refreshTried: true, stale: true }
   }
   await writeCache(file, fresh)
-  return { catalog: fresh, refreshTried: true }
+  return { catalog: fresh, refreshTried: true, stale: false }
 }
 
 /**

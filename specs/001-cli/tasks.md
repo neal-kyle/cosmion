@@ -252,14 +252,14 @@ drift from the code.
 
 **Tests first**
 
-- [ ] T087 [P] [US11] Write `tests/cli/doctor.test.ts`: a healthy setup passes every check and exits 0 (Story 11.1); each broken case (Node version and platform set through the context) fails or warns with a `fix`: Node older than 22.12, no key (and the key's source reported when there is one), rejected key, key limit under 10% remaining (warn), settings file readable by others (fail, exit 8; Story 11.2; on Windows `ok`, "not checked on Windows"), OpenRouter unreachable, catalog neither fresh nor refreshable, an unwritable folder, a ledger with skipped lines (warn with the count) (FR-095, FR-096); only one `GET /key` is made
-- [ ] T088 [P] [US12] Write `tests/cli/schema.test.ts`: `schema` prints JSON with or without `--json`: the version, every command in `commands/index.ts` with its arguments and options (name, alias, type, allowed values, required, repeatable, description), each output as JSON Schema from `z.toJSONSchema()`, the error schema and the exit code table from `exit-codes.ts` (FR-098)
-- [ ] T089 [US2] Write `tests/cli/agent-interface.test.ts` walking `commands/index.ts`: every command has `--help`; every command with `--json` in a failing case prints exactly one error object with the FR-040 exit code; no command prompts when stdin isn't a TTY (Story 2.3, SC-003)
+- [x] T087 [P] [US11] Write `tests/cli/doctor.test.ts`: a healthy setup passes every check and exits 0 (Story 11.1); each broken case (Node version and platform set through the context) fails or warns with a `fix`: Node older than 22.12, no key (and the key's source reported when there is one), rejected key, key limit under 10% remaining (warn), settings file readable by others (fail, exit 8; Story 11.2; on Windows `ok`, "not checked on Windows"), OpenRouter unreachable, catalog neither fresh nor refreshable, an unwritable folder, a ledger with skipped lines (warn with the count) (FR-095, FR-096); only one `GET /key` is made
+- [x] T088 [P] [US12] Write `tests/cli/schema.test.ts`: `schema` prints JSON with or without `--json`: the version, every command in `commands/index.ts` with its arguments and options (name, alias, type, allowed values, required, repeatable, description), each output as JSON Schema from `z.toJSONSchema()`, the error schema and the exit code table from `exit-codes.ts` (FR-098)
+- [x] T089 [US2] Write `tests/cli/agent-interface.test.ts` walking `commands/index.ts`: every command has `--help`; every command with `--json` in a failing case prints exactly one error object with the FR-040 exit code; no command prompts when stdin isn't a TTY (Story 2.3, SC-003)
 
 **Implementation**
 
-- [ ] T090 [P] [US11] Create `src/cli/commands/doctor.ts` (one small function per check) and register it
-- [ ] T091 [P] [US12] Create `src/cli/commands/schema.ts` and register it
+- [x] T090 [P] [US11] Create `src/cli/commands/doctor.ts` (one small function per check) and register it
+- [x] T091 [P] [US12] Create `src/cli/commands/schema.ts` and register it
 
 **Checkpoint**: all twelve commands exist and every story except US6 passes.
 

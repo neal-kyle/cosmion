@@ -23,6 +23,14 @@ export interface OptionDefinition {
   readonly description: string
 }
 
+/** Added to every command by `run.ts`, and listed for each by `schema`. */
+export const jsonOption = {
+  name: 'json',
+  flag: '--json',
+  type: 'boolean',
+  description: 'Print the result as one JSON object',
+} as const satisfies OptionDefinition
+
 /**
  * What `run` returns. Exit 8 isn't an error: the result is printed as usual (FR-041). A
  * batch stopped by an auth or credits error exits 3 or 4 with its report (FR-078).

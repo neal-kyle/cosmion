@@ -37,7 +37,8 @@ export async function removeSavedKey(ctx: Context): Promise<boolean> {
   return true
 }
 
-function settingsFile(ctx: Context): string {
+/** Where `cosmion auth` saves the key. */
+export function settingsFile(ctx: Context): string {
   return join(resolvePaths(ctx.env).config, 'settings.json')
 }
 
