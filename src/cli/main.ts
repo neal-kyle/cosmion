@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { homedir } from 'node:os'
 import type { Context } from './context.js'
 import { run } from './run.js'
 
@@ -30,6 +31,7 @@ const ctx: Context = {
   signal: interrupt.signal,
   platform: process.platform,
   nodeVersion: process.versions.node,
+  homeDir: homedir(),
 }
 
 // exitCode rather than exit(), so piped output is flushed first.

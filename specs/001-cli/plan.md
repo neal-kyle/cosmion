@@ -2,7 +2,8 @@
 
 **Branch**: `001-cli` | **Date**: 2026-10-18 | **Spec**: [spec.md](spec.md)
 
-**Status**: Approved by the maintainer, 2026-10-18
+**Status**: Approved by the maintainer, 2026-10-18. Amended 2026-10-29 (`cosmion skill`,
+Story 13): approved by the maintainer, 2026-10-29
 
 How the v0.1 CLI in the spec is built. The spec says *what* it does (commands, flags,
 JSON, exit codes); this says how, and why where the choice isn't obvious. OpenRouter
@@ -92,6 +93,9 @@ src/
     ├── gen-options.ts     Option definitions shared by gen, price, models rank, batch
     ├── key.ts             Which key is in use: env var, then settings file
     ├── hidden-input.ts    Read a line from a TTY without echoing it
+    ├── prompt.ts          Read a visible line from a TTY (skill install's questions)
+    ├── skills.ts          The agent folder table; write, find, update and remove
+    │                      Cosmion's SKILL.md copies
     ├── catalog-cache.ts   Load the cached catalog; refresh when stale, missing or asked
     ├── ledger.ts          Entry schema; append; read (skipping bad lines); find
     ├── generate.ts        The gen pipeline shared by gen, regen and batch rows
@@ -103,6 +107,7 @@ src/
         ├── gen.ts  price.ts  models.ts  models-rank.ts  history.ts  show.ts
         ├── auth.ts        auth, auth status, auth logout
         ├── batch.ts  usage.ts  regen.ts  doctor.ts  schema.ts
+        ├── skill.ts       skill install, skill update, skill uninstall
 tests/
 ├── helpers/
 │   ├── fake-openrouter.ts A fake that answers like OpenRouter, as a fetch function and
@@ -368,6 +373,37 @@ Network checks share one `GET /key`. The permission check is skipped (`ok`, "not
 on Windows") on Windows. The Node version and platform come from the context, so tests
 can check an old Node and the Windows branch on any machine.
 
+Doctor's `skill` check (FR-097) uses `skills.ts` to find copies, and reads only.
+
+### Skill install (FR-100–FR-108)
+
+Modelled on Vercel's `npx skills` (folders) and `gh skill update` (updates).
+
+- **One table.** `skills.ts` holds FR-108's table as data: per agent, one global
+  folder (two for Antigravity), one project folder and its home folder. `install`,
+  `update`, `uninstall`, `doctor` and the agent list in `--help` all read it. Chosen
+  agents resolve to folders; a `Set` of paths gives one write per folder (FR-102).
+- **What's written.** The package's own `SKILL.md`, found like `package.json`
+  (`../../SKILL.md` from `src/cli` and `dist/cli`), with `metadata.cosmion-version:
+  "<version>"` added to its frontmatter (FR-103). That one field is both the version
+  stamp and the mark that the file is Cosmion's. Written to a temp file and renamed,
+  like the catalog cache. All targets are checked first (an unmarked file without
+  `--force` exits 2 before anything is written).
+- **Finding copies.** `update`, `uninstall` and `doctor` look for a marked
+  `cosmion/SKILL.md` in every folder of the table (global, and project from the current
+  folder) plus any `--dir`. No list of installs is kept, so there's nothing to fall out
+  of step, and a teammate's committed copy is found like any other.
+- **Copies, not links.** A Node version manager (nvm, fnm, Volta) moves the package when
+  Node changes, Windows often refuses to make links, and Cursor is reported not to load
+  linked skills.
+- **Questions on a TTY (FR-101).** `prompt.ts` reads one visible line, like
+  `hidden-input.ts` without hiding it; Ctrl-C gives the same `InterruptedError`. The list
+  goes to stderr, numbered, pre-selected entries marked, each with its folder; the answer
+  is numbers separated by commas or spaces, Enter keeps the selection. Then `Global (all
+  projects) or this project? [g/p]`. No library: two questions don't earn one.
+- **Home folder** comes from a new `homeDir` in the context (`os.homedir()` in `main.ts`),
+  so tests point it at a temp folder.
+
 ### Paths and test hooks
 
 - **The name lives in one place,** `src/cli/name.ts`. The folder name (`cosmion-cli`), the
@@ -391,8 +427,8 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
 - **Testing seams** (the only things passed in, constitution II): every command gets a
   `Context`: `env`, `cwd`, `stdin`/`stdout`/`stderr` (with their TTY flags), `fetch`, the
   OpenRouter base URL (from `COSMION_TEST_OPENROUTER_URL` in `main.ts`, otherwise the real
-  one), an `AbortSignal`, and `platform` and `nodeVersion` (for `doctor` and the
-  permission checks). Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
+  one), an `AbortSignal`, `platform` and `nodeVersion` (for `doctor` and the
+  permission checks), and `homeDir` (for `skill`'s agent folders). Folders come from `COSMION_HOME` in `env`, so the ledger, cache and
   settings file are swapped by pointing at a temp folder. `cwd` is in the context because
   tests can't safely change the process's folder.
 - **`runCli(args, options)`** creates a temp `COSMION_HOME` and cwd, runs the command
@@ -461,6 +497,7 @@ Each phase leaves the CLI working and tested:
 9. `regen` (US9), `usage` (US8), `models rank` (US10).
 10. `doctor` (US11), `schema` (US12).
 11. Release: `SKILL.md`, README, LICENSE, pack-check, tag publishing (US6).
+12. `skill install`, `skill update`, `skill uninstall` (US13); v0.1 is tagged after this.
 
 ## Constitution check
 

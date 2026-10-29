@@ -23,4 +23,6 @@ export interface Context {
   signal: AbortSignal
   platform: NodeJS.Platform
   nodeVersion: string
+  /** The user's home folder, where agents keep their skills. */
+  homeDir: string
 }

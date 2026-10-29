@@ -4,7 +4,8 @@
 
 **Branch**: `001-cli` | **Date**: 2026-10-18
 
-**Status**: Approved by the maintainer, 2026-10-18
+**Status**: Approved by the maintainer, 2026-10-18. Phase 12 added and approved
+2026-10-29
 
 ## How to use this list
 
@@ -290,7 +291,31 @@ from.
 - [ ] T101 SC-001: from `npm install -g cosmion` to a saved image in under 2 minutes
 - [ ] T102 SC-007: an agent given only `SKILL.md` and `--help` generates an image to a given path and reports its cost
 
-**Checkpoint**: CI green on all three systems including pack-check; v0.1 ready to tag.
+**Checkpoint**: CI green on all three systems including pack-check. v0.1 is tagged after
+Phase 12; T099–T102 can be done before or after it.
+
+---
+
+## Phase 12: `skill install`, `skill update`, `skill uninstall` (US13)
+
+**Goal**: One command puts Cosmion's `SKILL.md` where each agent loads skills from, and one
+command updates it after an upgrade.
+
+**Tests first**
+
+- [x] T103 [P] [US13] Write `tests/cli/skill.test.ts` for `install`, with a temp `homeDir` and cwd: each `--agent` writes `cosmion/SKILL.md` in its global and its project folder (FR-108); Antigravity's global install writes both of its folders; Codex, OpenCode and Copilot together write one copy in `.agents/skills` listing all three, Claude Code adds `.claude/skills` (FR-102); `--dir` (repeatable); the copy is the package's `SKILL.md` with `metadata.cosmion-version` in its frontmatter (FR-103); an unmarked `cosmion/SKILL.md` exits 2 and nothing is written, `--force` replaces it, a marked one is replaced; without a TTY: no `--agent`/`--dir` exits 2 naming the flags, `--agent` without a scope exits 2, `--global` with `--project` exits 2, a scope with only `--dir` exits 2, an unknown agent exits 2 listing the names (FR-101); on a TTY: the list marks agents whose home folder exists, Enter installs those, typed numbers choose others, the scope question is asked unless passed, Ctrl-C exits 130 with nothing written. Add the three commands to `tests/cli/agent-interface.test.ts`'s list
+- [x] T104 [P] [US13] Write `tests/cli/skill-update.test.ts`: `skill update` rewrites marked copies from another version in global folders, the current project's folders and each `--dir`, reports `updated` or `current`, and leaves an unmarked file alone (FR-105); other commands never change a copy (FR-104). `skill uninstall` with options removes only those copies; with none, every global and project copy; never an unmarked file; removes the emptied `cosmion` folder (FR-106); no other file in the agents' folders changes (FR-107)
+- [x] T105 [P] [US13] Extend `tests/cli/doctor.test.ts`: a `skill` check that is `ok` with none installed (message mentions `cosmion skill install`), `ok` when every copy is current, and `warn` with `cosmion skill update` as the fix for an out-of-date global or project copy (FR-097)
+
+**Implementation**
+
+- [x] T106 [US13] Add `homeDir` to the `Context` (`os.homedir()` in `main.ts`, a temp folder in `runCli`), and create `src/cli/prompt.ts` (read one visible line on a TTY; Ctrl-C → `InterruptedError`)
+- [x] T107 [US13] Create `src/cli/skills.ts`: FR-108's table, resolving agents to folders, writing a marked copy, and finding marked copies (FR-102–FR-105)
+- [x] T108 [US13] Create `src/cli/commands/skill.ts` (a group with `install`, `update`, `uninstall`) and register it
+- [x] T109 [US13] Add the `skill` check to `src/cli/commands/doctor.ts`
+- [x] T110 [US13] Docs and packaging: the three commands in `SKILL.md`; the README's agent section uses `cosmion skill install` (manual copying stays as the fallback); `scripts/pack-check.mjs` runs the installed `cosmion skill install --dir <temp> --json` and checks the file matches the packaged `SKILL.md` apart from the version mark; `CLAUDE.md`'s command count
+
+**Checkpoint**: lint, test, build and pack-check pass; v0.1 ready to tag.
 
 ---
 
@@ -303,4 +328,5 @@ from.
 - Phase 6 (`gen`) needs Phases 3–5 (catalog, options, refs, ledger reading, key).
 - Phase 7 needs Phase 6's ledger. Phase 8 needs Phase 6's `generate.ts` and Phase 4's
   pricing. Phase 9 needs Phases 4, 6 and 7. Phase 10 needs every command. Phase 11 needs
-  all of them.
+  all of them. Phase 12 needs Phase 10 (`doctor`, the agent-interface test) and Phase 11
+  (`SKILL.md`, pack-check).

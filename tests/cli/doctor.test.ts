@@ -18,10 +18,14 @@ interface Check {
 function setup() {
   const fake = createFakeOpenRouter()
   const home = mkdtempSync(join(tmpdir(), 'cosmion-home-'))
+  const homeDir = mkdtempSync(join(tmpdir(), 'cosmion-user-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'cosmion-project-'))
   const doctor = async (options: RunCliOptions = {}) => {
     const result = await runCli(['doctor', '--json'], {
       fetch: fake.fetch,
       home,
+      homeDir,
+      cwd,
       env: { OPENROUTER_API_KEY: VALID_KEY },
       ...options,
     })
@@ -33,7 +37,7 @@ function setup() {
     }
     return { ...result, checks, check }
   }
-  return { fake, home, doctor }
+  return { fake, home, homeDir, cwd, doctor }
 }
 
 const keyRequests = (fake: ReturnType<typeof createFakeOpenRouter>) =>
@@ -56,6 +60,7 @@ describe('doctor (FR-095, FR-096)', () => {
       'data_folder',
       'cache_folder',
       'ledger',
+      'skill',
     ])
     for (const check of result.checks) {
       expect(check, check.name).toMatchObject({ status: 'ok', fix: null })
@@ -212,4 +217,35 @@ describe('doctor (FR-095, FR-096)', () => {
     expect(result.check('ledger')).toMatchObject({ status: 'warn', fix: expect.any(String) })
     expect(result.check('ledger').message).toContain('2')
   })
+
+  test('the skill check is ok with none installed, and says how to install one (FR-097)', async () => {
+    const { doctor } = setup()
+    const check = (await doctor()).check('skill')
+    expect(check).toMatchObject({ status: 'ok', fix: null })
+    expect(check.message).toContain('cosmion skill install')
+  })
+
+  test('the skill check is ok when every copy is current', async () => {
+    const { homeDir, cwd, doctor } = setup()
+    await runCli(['skill', 'install', '--agent', 'codex', '--global'], { homeDir, cwd })
+    expect((await doctor()).check('skill').status).toBe('ok')
+  })
+
+  test.each(['global', 'project'])(
+    'the skill check warns about an out-of-date %s copy',
+    async (scope) => {
+      const { homeDir, cwd, doctor } = setup()
+      await runCli(['skill', 'install', '--agent', 'claude-code', `--${scope}`], { homeDir, cwd })
+      const file = join(scope === 'global' ? homeDir : cwd, '.claude/skills/cosmion/SKILL.md')
+      writeFileSync(
+        file,
+        readFileSync(file, 'utf8').replace(/cosmion-version: "[^"]*"/, 'cosmion-version: "0.0.1"'),
+      )
+      const result = await doctor()
+      expect(result.exitCode).toBe(0)
+      expect(result.check('skill')).toMatchObject({ status: 'warn' })
+      expect(result.check('skill').message).toContain(file)
+      expect(result.check('skill').fix).toContain('cosmion skill update')
+    },
+  )
 })

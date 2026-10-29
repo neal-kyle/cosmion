@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project state
 
 Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
-bring-your-own-key, for developers and their agents. All twelve commands of v0.1 are built
+bring-your-own-key, for developers and their agents. All thirteen commands of v0.1 are built
 (`specs/001-cli/tasks.md`; unticked boxes there are the maintainer's manual release
 checks). Code lives in `src/` (`core/` logic, `cli/` commands and I/O), tests in `tests/`.
 `SKILL.md` (shipped to agents) and `README.md` are user docs: update them, and the

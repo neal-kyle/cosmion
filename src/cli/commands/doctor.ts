@@ -12,6 +12,8 @@ import { readLedgerLines } from '../ledger.js'
 import { ENV_PREFIX, TITLE } from '../name.js'
 import { formatUsd } from '../output.js'
 import { resolvePaths } from '../paths.js'
+import { allFolders, findCopies } from '../skills.js'
+import { readVersion } from '../version.js'
 
 const checkSchema = z.strictObject({
   name: z.string(),
@@ -56,6 +58,7 @@ export const doctor = defineCommand({
       await checkFolder('data_folder', paths.data),
       await checkFolder('cache_folder', paths.cache),
       await checkLedger(ctx),
+      await checkSkill(ctx),
     ]
     // Warnings are fine; a failure is exit 8, with the checks printed as usual (FR-096).
     const failed = checks.some((check) => check.status === 'fail')
@@ -243,6 +246,23 @@ async function checkLedger(ctx: Context): Promise<Check> {
       `Check that ${resolvePaths(ctx.env).data} is a folder you can read.`,
     )
   }
+}
+
+/** Copies `skill update` would change (FR-097); read only. */
+async function checkSkill(ctx: Context): Promise<Check> {
+  const copies = await findCopies(allFolders(ctx))
+  if (copies.length === 0) {
+    return ok('skill', 'No skill installed; `cosmion skill install` installs one for your agents.')
+  }
+  const stale = copies.filter((copy) => copy.version !== readVersion())
+  if (stale.length > 0) {
+    return warn(
+      'skill',
+      `From an older or newer Cosmion: ${stale.map((copy) => copy.file).join(', ')}.`,
+      'Run `cosmion skill update`.',
+    )
+  }
+  return ok('skill', `Up to date: ${copies.map((copy) => copy.file).join(', ')}.`)
 }
 
 function client(ctx: Context) {

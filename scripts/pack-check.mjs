@@ -70,6 +70,19 @@ try {
 
     const models = JSON.parse((await cosmion('cosmion', ['models', '--json'])).stdout)
     check(models.models.length > 0, `cosmion models --json lists ${models.models.length} models`)
+
+    // The installed package finds its own SKILL.md (FR-100).
+    const skills = join(work, 'skills')
+    const installed = JSON.parse(
+      (await cosmion('cosmion', ['skill', 'install', '--dir', skills, '--json'])).stdout,
+    ).installed
+    const copy = readFileSync(installed[0].path, 'utf8')
+    const unmarked = copy.replace(/metadata:\n {2}cosmion-version: "[^"]*"\n/, '')
+    check(
+      unmarked === readFileSync(join(root, 'SKILL.md'), 'utf8') &&
+        copy.includes(`cosmion-version: "${manifest.version}"`),
+      'cosmion skill install --dir writes the packaged SKILL.md with its version',
+    )
   } finally {
     await server.close()
   }

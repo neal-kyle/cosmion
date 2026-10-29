@@ -17,6 +17,8 @@ export interface RunCliOptions {
   home?: string
   /** Run in this folder, e.g. one holding the files a test passes in. */
   cwd?: string
+  /** The user's home folder, where agents keep their skills; a temp folder by default. */
+  homeDir?: string
   /** The only environment the command sees; COSMION_HOME is added. */
   env?: Record<string, string | undefined>
   stdin?: string
@@ -62,6 +64,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 export function createTestContext(options: Omit<RunCliOptions, 'commands'> = {}) {
   const home = options.home ?? mkdtempSync(join(tmpdir(), 'cosmion-home-'))
   const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), 'cosmion-cwd-'))
+  const homeDir = options.homeDir ?? mkdtempSync(join(tmpdir(), 'cosmion-user-'))
   let stdout = ''
   let stderr = ''
   const stdin = Object.assign(Readable.from(options.stdin === undefined ? [] : [options.stdin]), {
@@ -89,6 +92,7 @@ export function createTestContext(options: Omit<RunCliOptions, 'commands'> = {})
     signal: options.signal ?? new AbortController().signal,
     platform: options.platform ?? 'linux',
     nodeVersion: options.nodeVersion ?? '22.12.0',
+    homeDir,
   }
   return { ctx, home, cwd, stdout: () => stdout, stderr: () => stderr }
 }

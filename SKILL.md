@@ -260,13 +260,51 @@ Options: `--json`. Prints `{"removed": true|false}`.
 ### `cosmion doctor`
 
 Checks Node, the key, OpenRouter, the model catalog, the settings file's permissions,
-the folders and the history file.
+the folders, the history file and whether an installed skill is out of date.
 
 Options: `--json`.
 
 `{"checks": [{"name", "status": "ok|warn|fail", "message", "fix"}]}`. `fix` says what to
 do, and is `null` when the check passed. Exit 0 when nothing fails (warnings are fine),
 8 otherwise.
+
+### `cosmion skill install`
+
+Installs this `SKILL.md` as `cosmion/SKILL.md` in agents' skills folders. Agents sharing a
+folder share one copy. An existing `cosmion/SKILL.md` that Cosmion didn't write exits 2
+unless `--force` is passed.
+
+Options: `--agent <name>` (repeatable: `claude-code`, `codex`, `opencode`, `antigravity`,
+`cursor`, `grok-build`, `copilot`), `--global` (home folder, all projects) or
+`--project` (current folder), `--dir <path>` (any skills folder, repeatable), `--force`,
+`--json`. Without a terminal, pass `--agent` with `--global` or `--project`, or `--dir`.
+
+| Agent | Global | Project |
+|-------|--------|---------|
+| `claude-code` | `~/.claude/skills` | `.claude/skills` |
+| `codex`, `opencode`, `cursor`, `grok-build`, `copilot` | `~/.agents/skills` | `.agents/skills` |
+| `antigravity` | `~/.gemini/config/skills` and `~/.gemini/antigravity-cli/skills` | `.agents/skills` |
+
+`{"installed": [{"path", "scope": "global|project|dir", "agents": [...]}]}`
+
+### `cosmion skill update`
+
+Rewrites Cosmion's installed copies that came from another version: those in every global
+folder above and in the current folder's project folders. Run it after upgrading Cosmion.
+
+Options: `--dir <path>` (also update the copy there, repeatable), `--json`.
+
+`{"skills": [{"path", "status": "updated|current"}]}`
+
+### `cosmion skill uninstall`
+
+Removes Cosmion's installed copies, never anything else. With no options, every global and
+project copy; `--agent`, `--global`, `--project` and `--dir` narrow it.
+
+Options: `--agent <name>` (repeatable), `--global`, `--project`, `--dir <path>`
+(repeatable), `--json`.
+
+`{"removed": [{"path", "agents": [...]}]}`. `agents` lists every agent using that folder.
 
 ### `cosmion schema`
 

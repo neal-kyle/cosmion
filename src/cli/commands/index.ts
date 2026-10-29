@@ -9,6 +9,7 @@ import { price } from './price.js'
 import { regen } from './regen.js'
 import { schema } from './schema.js'
 import { show } from './show.js'
+import { skill } from './skill.js'
 import { usage } from './usage.js'
 
 /** Every command, in the order `--help` lists them. */
@@ -22,6 +23,7 @@ export const commands: readonly CommandDefinition[] = [
   models,
   price,
   auth,
+  skill,
   doctor,
   schema,
 ]

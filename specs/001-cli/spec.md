@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-17
 
-**Status**: Approved by the maintainer, 2026-10-18
+**Status**: Approved by the maintainer, 2026-10-18. Amended 2026-10-29 (Story 13,
+`cosmion skill`): approved by the maintainer, 2026-10-29
 
 **Input**: User description: "look at the docs (including the openrouter one) and create a spec
 to build the CLI. Follow the principles laid out in CLAUDE.md when creating it."
@@ -18,8 +19,8 @@ made and what it cost. It is built for developers and the agents they run, so ev
 command has a stable machine-readable interface.
 
 Everything in this spec ships together as **v0.1**: `gen`, `models`, `price`, `history`,
-`show`, `auth`, `batch`, `usage`, `regen`, `models rank`, `doctor` and `schema`
-(Stories 1–12). The build order is set by the tasks' phases, not by releases.
+`show`, `auth`, `batch`, `usage`, `regen`, `models rank`, `doctor`, `schema` and `skill`
+(Stories 1–13). The build order is set by the tasks' phases, not by releases.
 
 Ideas for later (OAuth sign-in, OS keychain, extra distribution channels, a TUI;
 `docs/ideas/`) are not part of this spec. How it's built (`src/core` and `src/cli`, JSON Lines ledger, folders,
@@ -56,6 +57,15 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 - Q: A response can be charged and return no images. Record it? → A: Yes: a ledger entry with the cost and no images, exit 7, not retryable. The ledger should show everything spent; no extra field says why (the error message does).
 - Q: With `--count 3` and one image back, is it named `cosmion-<id>.<ext>` or `cosmion-<id>-1.<ext>`? → A: `-1`: names follow the number asked for, the paths checked before sending.
 - Q: Is the prompt sent exactly as given? → A: No: spaces and line breaks at its start and end are removed, so stdin's final newline isn't sent and a blank prompt counts as empty (FR-001).
+
+### Session 2026-10-29
+
+- Q: How does `SKILL.md` reach an agent? → A: `cosmion skill install` copies it into the agent's skills folder. It's part of v0.1. `npm install` doesn't ask or install anything itself: npm runs install scripts without a terminal and hides their output, many installs have no one to answer, and the package has no install scripts (FR-060).
+- Q: Which agents? → A: Claude Code, Codex, OpenCode, Antigravity, Cursor, Grok Build and Copilot (FR-108); `--dir` installs into any other folder. Not Gemini CLI (replaced by Antigravity's CLI). Not Muse Code until its folders are confirmed from Meta's own documentation; `--dir` covers it meanwhile.
+- Q: Which folder for each agent, when many read the shared `.agents/skills` as well as their own? → A: As Vercel's `npx skills` does: one fixed folder per agent and scope, `.agents/skills` wherever the agent reads it, otherwise its own. Agents sharing a folder share one copy. A user who wants an agent's own folder passes it with `--dir`. An agent that reads both `.claude/skills` and `.agents/skills` (OpenCode, Grok Build) sees two identical copies when Claude Code is chosen too; that's accepted, as Vercel does.
+- Q: Global or project? → A: Either, chosen at install. A project install goes in the project's folder, so it can be committed and shared.
+- Q: Does the installed skill update with the CLI? → A: Not on its own. As `gh skill update` does, `cosmion skill update` finds Cosmion's copies by looking in the agents' folders and rewrites those from another version; `doctor` warns when one is out of date. An old copy still works; it just doesn't mention newer options. No links: a Node version manager moves the package, Windows often can't make them, and one agent (Cursor) is reported not to load them.
+- Q: Should `skill update --all` update every project ever installed into? → A: No. It would need a lasting list of project paths; running `skill update` in that project fixes it.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -357,6 +367,35 @@ the test suite against the shape it declares.
 
 ---
 
+### User Story 13 - Install the skill for my agents (Priority: P3)
+
+A developer installs Cosmion's `SKILL.md` into the skills folder of the coding agents they
+use, for all their projects or for one, and updates it after upgrading Cosmion.
+
+**Why this priority**: Makes SC-007 (an agent working from `SKILL.md`) one command away;
+copying the file by hand still works.
+
+**Independent Test**: With a temp home folder and project folder, run
+`cosmion skill install` for each agent and scope, then `skill update` with a different
+version; check which files exist, their contents and the JSON output.
+
+**Acceptance Scenarios**:
+
+1. **Given** a terminal, **When** I run `cosmion skill install`, **Then** it lists the
+   supported agents with those found on this machine pre-selected, asks whether to install
+   globally or in this project, and installs `SKILL.md` once per folder needed.
+2. **Given** no terminal, **When** an agent runs
+   `cosmion skill install --agent claude-code --global --json`, **Then** it installs
+   without asking; without `--agent` or `--dir` it exits 2 saying what to pass.
+3. **Given** Codex, OpenCode and Copilot chosen, **When** I install, **Then** one copy is
+   written, in `.agents/skills`, listed with all three.
+4. **Given** a copy from an older version, **When** I run `cosmion doctor`, **Then** it
+   warns, with `cosmion skill update` as the fix, and that command updates it.
+5. **Given** a `cosmion/SKILL.md` that Cosmion didn't install, **When** I install to that
+   folder, **Then** it exits 2 and changes nothing, unless I pass `--force`.
+
+---
+
 ### Edge Cases
 
 - **Paid but not saved:** if the image can't be decoded or written after OpenRouter has
@@ -397,6 +436,17 @@ the test suite against the shape it declares.
 - **`regen` of an entry whose model was removed:** exits 5.
 - **`regen` of an entry without a seed** (its model has no `seed` option): re-runs with
   the same settings; a warning on stderr says the result won't be identical.
+- **Agents sharing a folder** (Codex, OpenCode, Cursor, Grok Build and Copilot use
+  `.agents/skills`): one copy, listed with every chosen agent (FR-102).
+- **Claude Code plus OpenCode or Grok Build:** those two also read `.claude/skills`, so
+  they see two identical copies. Accepted (see Clarifications); Grok Build keeps one per
+  name.
+- **Uninstalling for one agent** removes the copy in its folder; other agents using that
+  folder lose it too. The result lists them, and `skill install` puts it back.
+- **Skill installed for an agent that isn't installed:** the folders are created anyway;
+  choosing the agent is the user's call.
+- **A teammate's clone** has a committed project copy: `doctor` and `skill update` find it,
+  since copies are found by looking in the folders.
 
 ## Requirements *(mandatory)*
 
@@ -713,6 +763,10 @@ the test suite against the shape it declares.
   catalog cache fresh or refreshable; config, data and cache folders writable; ledger
   readable (warn with the count of skipped lines).
 - **FR-096**: Exit 0 when nothing fails (warnings allowed), 8 otherwise.
+- **FR-097**: `doctor` MUST also check the installed skill: `warn` when a Cosmion copy in
+  any global folder or the current project's folders (FR-108) is from another version,
+  with `cosmion skill update` as the fix; otherwise `ok`, including when none is installed
+  (the message then mentions `cosmion skill install`).
 
 **Schema: `cosmion schema`**
 
@@ -722,6 +776,55 @@ the test suite against the shape it declares.
   exit code table.
 - **FR-099**: The schema MUST come from the same definitions the CLI uses to parse options
   and produce output, so it can't drift; tests validate real output against it.
+
+**Skill: `cosmion skill install | update | uninstall`**
+
+- **FR-100**: `cosmion skill install [--agent <name>]… [--dir <path>]… [--global | --project]
+  [--force] [--json]` MUST write the CLI's own `SKILL.md` as `cosmion/SKILL.md` inside
+  each chosen agent's folder for the chosen scope (FR-108), and inside each `--dir` (any
+  folder an agent loads skills from). A project install uses the current folder as the
+  project root. Missing folders are created.
+- **FR-101**: When stdin is a TTY and neither `--agent` nor `--dir` is passed, `install`
+  MUST list the agents, numbered, with those whose home folder exists (FR-108)
+  pre-selected (Enter accepts the selection), then ask global or project unless one was
+  passed. Without a TTY, it exits 2 when neither `--agent` nor `--dir` is passed, or when
+  `--agent` is passed without `--global` or `--project`. Passing both `--global` and
+  `--project`, or either with only `--dir`, exits 2.
+- **FR-102**: Each distinct folder MUST be written once, and the result lists it with
+  every chosen agent that uses it.
+- **FR-103**: Each installed copy MUST carry the Cosmion version in its frontmatter
+  (`metadata.cosmion-version`), which also marks it as Cosmion's. An existing
+  `cosmion/SKILL.md` without that mark MUST NOT be replaced unless `--force` is passed
+  (exit 2 before anything is written); one with the mark is replaced.
+- **FR-104**: Cosmion MUST NOT change an installed copy except through `skill install`,
+  `update` or `uninstall`, and keeps no list of where it installed.
+- **FR-105**: `cosmion skill update [--dir <path>]… [--json]` MUST look in every global
+  folder and every project folder of the current folder (FR-108), and in each `--dir`,
+  rewrite each Cosmion-marked copy whose version isn't the running one, and report every
+  marked copy found as `updated` or `current`. Unmarked files are left alone.
+- **FR-106**: `cosmion skill uninstall [--agent <name>]… [--dir <path>]… [--global |
+  --project] [--json]` MUST remove the Cosmion-marked copies in the chosen folders; with no
+  options, those in every global folder and the current project's folders. It never asks,
+  never removes an unmarked file, and removes the `cosmion` folder when it is left empty.
+- **FR-107**: `skill install`, `update` and `uninstall` MUST never touch an agent's other
+  skills or settings.
+- **FR-108**: The agents and the one folder Cosmion uses for each (`~` is the user's home
+  folder on every system; project folders are relative to the current folder):
+
+  | `--agent` | Global | Project | Home folder (pre-selects) |
+  |-----------|--------|---------|---------------------------|
+  | `claude-code` | `~/.claude/skills` | `.claude/skills` | `~/.claude` |
+  | `codex` | `~/.agents/skills` | `.agents/skills` | `~/.codex` |
+  | `opencode` | `~/.agents/skills` | `.agents/skills` | `~/.config/opencode` |
+  | `antigravity` | `~/.gemini/config/skills` (app) and `~/.gemini/antigravity-cli/skills` (CLI) | `.agents/skills` | `~/.gemini` |
+  | `cursor` | `~/.agents/skills` | `.agents/skills` | `~/.cursor` |
+  | `grok-build` | `~/.agents/skills` | `.agents/skills` | `~/.grok` |
+  | `copilot` | `~/.agents/skills` | `.agents/skills` | `~/.copilot` |
+
+  Each agent's documentation (checked with Context7 on 2026-10-29) lists the folder used.
+  Antigravity's app and CLI are separate products, so its global install writes both.
+  Cursor's own CLI is reported not to list skills from `~/.agents/skills` in its `/` menu,
+  though its agent loads them; `--dir ~/.cursor/skills` is the alternative.
 
 **Release**
 
@@ -747,6 +850,8 @@ the test suite against the shape it declares.
 - **Batch**: a run of one input file under one budget, identified by `batch_id`; its rows'
   results live only as ledger entries (plus the printed report).
 - **Settings file**: the saved key, owner-only.
+- **Installed skill**: a copy of `SKILL.md` in an agent's skills folder, marked with the
+  Cosmion version that wrote it. Found by looking in the folders; no list is kept.
 
 ### JSON output shapes (other commands)
 
@@ -760,6 +865,9 @@ the test suite against the shape it declares.
 - `models rank`: `{"settings", "models": [{"id", "name", "price"}]}`
 - `doctor`: `{"checks": [{"name", "status": "ok|warn|fail", "message", "fix"}]}`
 - `schema`: `{"version", "commands": [...], "error", "exit_codes": [...]}`
+- `skill install`: `{"installed": [{"path", "scope": "global|project|dir", "agents": [...]}]}` (`agents` is empty for `--dir`)
+- `skill update`: `{"skills": [{"path", "status": "updated|current"}]}`
+- `skill uninstall`: `{"removed": [{"path", "agents": [...]}]}` (`agents`: the listed agents that use that folder)
 
 ## Success Criteria *(mandatory)*
 

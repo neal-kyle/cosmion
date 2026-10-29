@@ -21,7 +21,7 @@ const runnable = walk(commands)
   .map(({ words }) => words)
 
 describe('the agent interface, for every command (Story 2, SC-003)', () => {
-  test('the twelve commands and the subcommands of auth are all here', () => {
+  test('the thirteen commands and their subcommands are all here', () => {
     expect(runnable.map((words) => words.join(' ')).sort()).toEqual(
       [
         'auth',
@@ -37,6 +37,9 @@ describe('the agent interface, for every command (Story 2, SC-003)', () => {
         'regen',
         'schema',
         'show',
+        'skill install',
+        'skill uninstall',
+        'skill update',
         'usage',
       ].sort(),
     )

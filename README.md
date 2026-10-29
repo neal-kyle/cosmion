@@ -62,6 +62,7 @@ Set `COSMION_MODEL` to stop passing `-m` every time.
 | `cosmion show <id>` | One generation in full |
 | `cosmion usage` | What you spent, by model or by day |
 | `cosmion auth` | Save your key (`auth status`, `auth logout`) |
+| `cosmion skill install` | Install `SKILL.md` for your coding agents (`skill update`, `skill uninstall`) |
 | `cosmion doctor` | Check that everything is set up |
 | `cosmion schema` | The whole interface as JSON, for agents |
 
@@ -71,12 +72,20 @@ Set `COSMION_MODEL` to stop passing `-m` every time.
 
 Every command takes `--json` and prints one JSON object on stdout, with stable exit codes
 and no prompts when there's no terminal. [`SKILL.md`](SKILL.md) tells an agent how to use
-all of it, and ships in the package. For Claude Code, for example:
+all of it. Install it for your agents:
 
 ```sh
-mkdir -p ~/.claude/skills/cosmion
-cp "$(npm root -g)/cosmion/SKILL.md" ~/.claude/skills/cosmion/
+cosmion skill install
 ```
+
+It asks which agents (Claude Code, Codex, OpenCode, Antigravity, Cursor, Grok Build,
+Copilot) and whether for all projects or this one. Agents that share a skills folder share
+one copy. For another agent, pass its skills folder: `cosmion skill install --dir <path>`.
+After upgrading Cosmion, `cosmion skill update` brings the installed copies up to date;
+`cosmion doctor` reminds you.
+
+Or copy it yourself: it's at `$(npm root -g)/cosmion/SKILL.md`, and goes in an agent's
+skills folder as `cosmion/SKILL.md`.
 
 Then ask it something like:
 
