@@ -435,7 +435,11 @@ behavior (`--json` output, exit codes, files written) and the batch budget.
 - **CI** (`.github/workflows/ci.yml`): on every push, on Ubuntu, macOS and Windows with
   Node 22: install, lint, test, build, pack-check. On a `v*` tag, after those pass on all
   three: `npm publish` with npm's trusted publishing (GitHub's OIDC, no stored token;
-  set up once on npmjs.com) and provenance.
+  set up once on npmjs.com) and provenance, once a check confirms the tag is `v` plus
+  `package.json`'s version. `prepack` builds, so a pack or publish always ships a fresh
+  `dist/`.
+- **pack-check** is `.mjs` and imports the TypeScript fake directly, with Node's
+  `--experimental-strip-types` (built in since 22.6), so it needs no build step of its own.
 - **npm name:** `cosmion` has never been published (checked 2026-10-18), and the `csn`
   package installs no command, so neither command clashes. Worth publishing a placeholder
   early to hold the name. Before launch, search USPTO, EUIPO and CIPC for "COSMION" in

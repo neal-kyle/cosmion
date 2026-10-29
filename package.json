@@ -1,7 +1,14 @@
 {
   "name": "cosmion",
   "version": "0.1.0",
-  "description": "Generate images with any model on OpenRouter, bring your own key. For developers and their agents.",
+  "description": "Generate images with any OpenRouter model from your terminal or your agent, with your own key.",
+  "keywords": [
+    "openrouter",
+    "image-generation",
+    "cli",
+    "ai",
+    "agents"
+  ],
   "license": "MIT",
   "author": "Kyle Neal",
   "type": "module",
@@ -18,10 +25,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "pretest": "npm run build",
     "test": "vitest run",
     "lint": "biome check . && tsc --noEmit",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "pack-check": "node --experimental-strip-types scripts/pack-check.mjs"
   },
   "dependencies": {
     "commander": "^15.0.0",

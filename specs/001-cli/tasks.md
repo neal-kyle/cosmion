@@ -272,16 +272,16 @@ from.
 
 **Tests first**
 
-- [ ] T092 [US6] Write `tests/skill-md.test.ts`: `SKILL.md` mentions every command, every option and every exit code, read from the command definitions and `exit-codes.ts` (FR-045)
+- [x] T092 [US6] Write `tests/skill-md.test.ts`: `SKILL.md` mentions every command, every option and every exit code, read from the command definitions and `exit-codes.ts` (FR-045)
 
 **Implementation**
 
-- [ ] T093 [P] [US6] Add `LICENSE` (MIT, Kyle Neal, 2026) (FR-060)
-- [ ] T094 [US6] Write `SKILL.md`: every command, option, JSON output shape and exit code, `csn` as the short form, `COSMION_MODEL`, `COSMION_HOME` (FR-057; not `COSMION_TEST_OPENROUTER_URL`, FR-058), and the agent rule for `batch`: always pass `--budget`, use `--no-budget` only when the user asks, and suggest it to the user rather than using it when a batch stops on an unknown cost; after a timeout, check openrouter.ai activity before trying again (FR-017); estimates match only the same settings, including the `--format` that `--out` implies (FR-034) (FR-044a, FR-045)
-- [ ] T095 [P] [US6] Write `README.md`: install, a terminal example, an agent example, `csn`, the privacy sentence, the tip to set a spending limit on the key, `COSMION_HOME` and `COSMION_DEBUG` (FR-057, FR-059, FR-061). Its first line says what Cosmion does in search-friendly words (e.g. "generate images with any OpenRouter model from your terminal or your agent"), and `package.json` gets matching `keywords` (`openrouter`, `image-generation`, `cli`, `ai`, `agents`), since npm search reads them
-- [ ] T096 [US6] Create `scripts/pack-check.mjs` and the `pack-check` script: `npm pack`, install the tarball in an empty temp folder, check both `cosmion` and `csn` exist, that the installed `package.json` has `engines.node: ">=22.12.0"` (Story 6.2) and that the install contains no `.node` files or install scripts (FR-060), run `cosmion --version` and `cosmion models --json` against the fake server via `COSMION_TEST_OPENROUTER_URL` with a temp `COSMION_HOME` (FR-063, Story 6.1). The fake is TypeScript; if a `.mjs` script can't start it simply, run the check as a Vitest file excluded from `npm test` instead and update the plan
-- [ ] T097 [US6] Extend `.github/workflows/ci.yml`: pack-check on all three systems; on a `v*` tag, after all pass, `npm publish --provenance` with npm trusted publishing (FR-062)
-- [ ] T098 [US6] Update `CLAUDE.md`'s project state (code now exists) and anything else a future session needs
+- [x] T093 [P] [US6] Add `LICENSE` (MIT, Kyle Neal, 2026) (FR-060)
+- [x] T094 [US6] Write `SKILL.md`: every command, option, JSON output shape and exit code, `csn` as the short form, `COSMION_MODEL`, `COSMION_HOME` (FR-057; not `COSMION_TEST_OPENROUTER_URL`, FR-058), and the agent rule for `batch`: always pass `--budget`, use `--no-budget` only when the user asks, and suggest it to the user rather than using it when a batch stops on an unknown cost; after a timeout, check openrouter.ai activity before trying again (FR-017); estimates match only the same settings, including the `--format` that `--out` implies (FR-034) (FR-044a, FR-045)
+- [x] T095 [P] [US6] Write `README.md`: install, a terminal example, an agent example, `csn`, the privacy sentence, the tip to set a spending limit on the key, `COSMION_HOME` and `COSMION_DEBUG` (FR-057, FR-059, FR-061). Its first line says what Cosmion does in search-friendly words (e.g. "generate images with any OpenRouter model from your terminal or your agent"), and `package.json` gets matching `keywords` (`openrouter`, `image-generation`, `cli`, `ai`, `agents`), since npm search reads them
+- [x] T096 [US6] Create `scripts/pack-check.mjs` and the `pack-check` script: `npm pack`, install the tarball in an empty temp folder, check both `cosmion` and `csn` exist, that the installed `package.json` has `engines.node: ">=22.12.0"` (Story 6.2) and that the install contains no `.node` files or install scripts (FR-060), run `cosmion --version` and `cosmion models --json` against the fake server via `COSMION_TEST_OPENROUTER_URL` with a temp `COSMION_HOME` (FR-063, Story 6.1). The fake is TypeScript; if a `.mjs` script can't start it simply, run the check as a Vitest file excluded from `npm test` instead and update the plan
+- [x] T097 [US6] Extend `.github/workflows/ci.yml`: pack-check on all three systems; on a `v*` tag, after all pass, `npm publish --provenance` with npm trusted publishing (FR-062)
+- [x] T098 [US6] Update `CLAUDE.md`'s project state (code now exists) and anything else a future session needs
 
 **Manual checks by the maintainer** (they need real money, a real key or a fresh machine)
 

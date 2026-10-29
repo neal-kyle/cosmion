@@ -5,8 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project state
 
 Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
-bring-your-own-key, for developers and their agents. It's being built phase by phase from
-`specs/001-cli/tasks.md`; the boxes ticked there are what exists.
+bring-your-own-key, for developers and their agents. All twelve commands of v0.1 are built
+(`specs/001-cli/tasks.md`; unticked boxes there are the maintainer's manual release
+checks). Code lives in `src/` (`core/` logic, `cli/` commands and I/O), tests in `tests/`.
+`SKILL.md` (shipped to agents) and `README.md` are user docs: update them, and the
+`tests/skill-md.test.ts` they must pass, whenever a command, option or exit code changes.
 
 **The rules live in `.specify/memory/constitution.md`**: how code is written, testing,
 the agent interface, the feature workflow and git. Read it before any work; this file
@@ -14,8 +17,8 @@ doesn't repeat it.
 
 Where things are:
 
-- `specs/`: what's being built. `specs/001-cli` covers the whole CLI, shipping together as
-  v0.1; when asked what's next, follow its tasks' phases.
+- `specs/`: what's built and why. `specs/001-cli` covers the whole CLI (v0.1); new work
+  starts a new spec.
 - `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Cosmion
   uses, including what was checked against the live API. Check it before speccing
   anything that talks to OpenRouter.
@@ -28,9 +31,12 @@ Where things are:
 | `npm test` | Builds first (`pretest`), then Vitest, all tests. `tests/concurrency.test.ts` runs `dist/`, so a bare `npx vitest` needs a fresh build |
 | `npm run lint` | Biome check, then `tsc --noEmit` over source and tests (`tsconfig.json`) |
 | `npm run format` | Biome formats the code |
+| `npm run pack-check` | Packs and installs the package in a temp folder, then runs it against the fake (`scripts/pack-check.mjs`; needs network for the install) |
 | `node dist/cli/main.js …` | Run the built CLI (or `npm link` once, then `cosmion …`) |
 
-Each phase ends with lint, test and build passing.
+Each change ends with lint, test and build passing. Releasing: bump `version` in
+`package.json`, merge to `main`, push a tag `v<version>`; CI publishes to npm once every
+system passes.
 
 `COSMION_TEST_OPENROUTER_URL=<url>` points the built CLI at a fake OpenRouter (FR-058);
 `serveFakeOpenRouter()` in `tests/helpers/fake-openrouter.ts` serves one. It's test-only:
