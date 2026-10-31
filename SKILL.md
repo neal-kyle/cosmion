@@ -273,20 +273,25 @@ do, and is `null` when the check passed. Exit 0 when nothing fails (warnings are
 
 ### `cosmion skill install`
 
-Installs this `SKILL.md` as `cosmion/SKILL.md` in agents' skills folders. Agents sharing a
-folder share one copy. An existing `cosmion/SKILL.md` that Cosmion didn't write exits 2
+Installs this `SKILL.md` as `cosmion/SKILL.md` in agents' skills folders. An agent with its
+own folder gets the skill there, for it alone; `shared` is the folder that Codex and most
+other agents read. An existing `cosmion/SKILL.md` that Cosmion didn't write exits 2
 unless `--force` is passed.
 
 Options: `--agent <name>` (repeatable: `claude-code`, `codex`, `opencode`, `antigravity`,
-`cursor`, `grok-build`, `copilot`), `--global` (home folder, all projects) or
+`cursor`, `grok-build`, `copilot`, `shared`), `--global` (home folder, all projects) or
 `--project` (current folder), `--dir <path>` (any skills folder, repeatable), `--force`,
 `--json`. Without a terminal, pass `--agent` with `--global` or `--project`, or `--dir`.
 
 | Agent | Global | Project |
 |-------|--------|---------|
 | `claude-code` | `~/.claude/skills` | `.claude/skills` |
-| `codex`, `opencode`, `cursor`, `grok-build`, `copilot` | `~/.agents/skills` | `.agents/skills` |
-| `antigravity` | `~/.gemini/config/skills` and `~/.gemini/antigravity-cli/skills` | `.agents/skills` |
+| `codex`, `shared` | `~/.agents/skills` | `.agents/skills` |
+| `opencode` | `~/.config/opencode/skills` | `.opencode/skills` |
+| `antigravity` | `~/.gemini/config/skills` | `.agents/skills` |
+| `cursor` | `~/.cursor/skills` | `.cursor/skills` |
+| `grok-build` | `~/.grok/skills` | `.grok/skills` |
+| `copilot` | `~/.copilot/skills` | `.github/skills` |
 
 `{"installed": [{"path", "scope": "global|project|dir", "agents": [...]}]}`
 

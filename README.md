@@ -79,9 +79,10 @@ all of it. Install it for your agents:
 cosmion skill install
 ```
 
-It asks which agents (Claude Code, Codex, OpenCode, Antigravity, Cursor, Grok Build,
-Copilot) and whether for all projects or this one. Agents that share a skills folder share
-one copy. For another agent, pass its skills folder: `cosmion skill install --dir <path>`.
+It asks whether for all projects or this one, then which agents (Claude Code, Codex,
+OpenCode, Antigravity, Cursor, Grok Build, Copilot). An agent with its own skills folder gets the skill for itself; **Shared folder** is
+`.agents/skills`, read by Codex and most others. For another agent, pass its skills folder:
+`cosmion skill install --dir <path>`.
 After upgrading Cosmion, `cosmion skill update` brings the installed copies up to date;
 `cosmion doctor` reminds you.
 

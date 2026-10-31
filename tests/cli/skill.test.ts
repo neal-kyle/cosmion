@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, test } from 'vitest'
 import { readVersion } from '../../src/cli/version.js'
 import { type RunCliOptions, runCli } from '../helpers/run-cli.js'
@@ -38,14 +39,12 @@ describe('skill install (FR-100–FR-103, FR-108)', () => {
   const folders: Record<string, { global: string[]; project: string }> = {
     'claude-code': { global: ['.claude/skills'], project: '.claude/skills' },
     codex: { global: ['.agents/skills'], project: '.agents/skills' },
-    opencode: { global: ['.agents/skills'], project: '.agents/skills' },
-    antigravity: {
-      global: ['.gemini/config/skills', '.gemini/antigravity-cli/skills'],
-      project: '.agents/skills',
-    },
-    cursor: { global: ['.agents/skills'], project: '.agents/skills' },
-    'grok-build': { global: ['.agents/skills'], project: '.agents/skills' },
-    copilot: { global: ['.agents/skills'], project: '.agents/skills' },
+    opencode: { global: ['.config/opencode/skills'], project: '.opencode/skills' },
+    antigravity: { global: ['.gemini/config/skills'], project: '.agents/skills' },
+    cursor: { global: ['.cursor/skills'], project: '.cursor/skills' },
+    'grok-build': { global: ['.grok/skills'], project: '.grok/skills' },
+    copilot: { global: ['.copilot/skills'], project: '.github/skills' },
+    shared: { global: ['.agents/skills'], project: '.agents/skills' },
   }
 
   test.each(Object.entries(folders))('%s, globally and in a project', async (agent, where) => {
@@ -77,15 +76,15 @@ describe('skill install (FR-100–FR-103, FR-108)', () => {
     expect(unmarked(text)).toBe(PACKAGED)
   })
 
-  test('agents sharing a folder get one copy, listed with each of them (FR-102)', async () => {
+  test('agents using one folder get one copy, listed with each of them (FR-102)', async () => {
     const t = setup()
     const both = await t.install([
       '--agent',
       'codex',
       '--agent',
-      'opencode',
+      'antigravity',
       '--agent',
-      'copilot',
+      'shared',
       '--agent',
       'claude-code',
       '--project',
@@ -97,9 +96,17 @@ describe('skill install (FR-100–FR-103, FR-108)', () => {
       {
         path: t.skill(join(t.cwd, '.agents/skills')),
         scope: 'project',
-        agents: ['codex', 'opencode', 'copilot'],
+        agents: ['codex', 'antigravity', 'shared'],
       },
     ])
+  })
+
+  test('an agent with its own folder stays out of the shared one', async () => {
+    const t = setup()
+    const result = await t.install(['--agent', 'opencode', '--global'])
+    expect(result.exitCode).toBe(0)
+    expect(existsSync(t.skill(join(t.homeDir, '.config/opencode/skills')))).toBe(true)
+    expect(existsSync(join(t.homeDir, '.agents'))).toBe(false)
   })
 
   test('--dir installs into any folder, and can be repeated', async () => {
@@ -164,7 +171,9 @@ describe('skill install (FR-100–FR-103, FR-108)', () => {
     ])
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain(t.skill(join(t.homeDir, '.agents/skills')))
-    expect(result.stdout).toContain('Codex, Cursor')
+    expect(result.stdout).toContain('Installed for Codex')
+    expect(result.stdout).toContain(t.skill(join(t.homeDir, '.cursor/skills')))
+    expect(result.stdout).toContain('Installed for Cursor')
   })
 })
 
@@ -186,53 +195,198 @@ describe('skill install without a terminal (FR-101)', () => {
 })
 
 describe('skill install on a terminal (FR-101)', () => {
-  const tty = (stdin: string): RunCliOptions => ({ stdin, stdinIsTTY: true })
-
-  test('lists the agents, those found on this machine marked, and Enter installs them', async () => {
-    const t = setup()
-    mkdirSync(join(t.homeDir, '.claude'))
-    mkdirSync(join(t.homeDir, '.cursor'))
-    const result = await t.install(['--global'], tty('\n'))
-    expect(result.exitCode).toBe(0)
-    expect(result.stderr).toMatch(/1\. \[x\] Claude Code/)
-    expect(result.stderr).toMatch(/2\. \[ \] Codex/)
-    expect(result.stderr).toMatch(/5\. \[x\] Cursor/)
-    expect(result.installed.map((i) => i.agents)).toEqual([['claude-code'], ['cursor']])
+  const UP = '\x1b[A'
+  const DOWN = '\x1b[B'
+  const ENTER = '\r'
+  const SPACE = ' '
+  const CTRL_C = '\x03'
+  const keys = (stdin: string): RunCliOptions => ({
+    stdin,
+    stdinIsTTY: true,
+    stderrIsTTY: true,
+    columns: 100,
   })
 
-  test('typed numbers choose the agents, and the scope is asked', async () => {
+  test('asks where first, then lists every agent, whatever is on this computer', async () => {
     const t = setup()
-    const result = await t.install([], tty('2, 7\np\n'))
+    const result = await t.install([], keys(ENTER + SPACE + ENTER))
     expect(result.exitCode).toBe(0)
-    expect(result.stderr).toMatch(/Global .* or this project\?/)
-    expect(result.installed).toEqual([
-      {
-        path: t.skill(join(t.cwd, '.agents/skills')),
-        scope: 'project',
-        agents: ['codex', 'copilot'],
-      },
+    const screen = stripVTControlCharacters(result.stderr)
+    expect(screen.indexOf('where?')).toBeLessThan(screen.indexOf('Which agents?'))
+    for (const row of [
+      'Claude Code',
+      'OpenCode',
+      'Antigravity',
+      'Cursor',
+      'Grok Build',
+      'Copilot',
+      'Shared folder',
+    ]) {
+      expect(screen).toContain(row)
+    }
+    expect(screen).toContain('~/.config/opencode/skills')
+    expect(screen).not.toContain('Codex')
+    expect(screen).not.toContain('--dir')
+    expect(result.installed.map((i) => i.path)).toEqual([
+      t.skill(join(t.homeDir, '.claude/skills')),
     ])
   })
 
-  test('a number that is not in the list exits 2', async () => {
+  test('nothing starts ticked: Enter alone chooses nothing, and says so', async () => {
     const t = setup()
-    const result = await t.install(['--global'], tty('9\n'))
+    mkdirSync(join(t.homeDir, '.claude'))
+    const result = await t.install(['--global'], keys(ENTER))
     expect(result.exitCode).toBe(2)
+    expect(stripVTControlCharacters(result.stderr)).toContain('Select at least one')
+    expect(errorOf(result.json).message).toContain('No agents chosen')
+    expect(existsSync(join(t.homeDir, '.claude/skills'))).toBe(false)
   })
 
-  test('nothing chosen exits 2', async () => {
+  test("one agent's row installs only in its own folder", async () => {
     const t = setup()
-    const result = await t.install(['--global'], tty('\n'))
-    expect(result.exitCode).toBe(2)
-  })
-
-  test('Ctrl-C exits 130 and writes nothing', async () => {
-    const t = setup()
-    const controller = new AbortController()
-    controller.abort()
-    const result = await t.install([], { ...tty(''), signal: controller.signal })
-    expect(result.exitCode).toBe(130)
+    const result = await t.install(['--global'], keys(DOWN + SPACE + ENTER))
+    expect(result.installed).toEqual([
+      {
+        path: t.skill(join(t.homeDir, '.config/opencode/skills')),
+        scope: 'global',
+        agents: ['opencode'],
+      },
+    ])
     expect(existsSync(join(t.homeDir, '.agents'))).toBe(false)
-    expect(existsSync(join(t.cwd, '.agents'))).toBe(false)
+  })
+
+  test('the shared row is last and installs only in the shared folder', async () => {
+    const t = setup()
+    const result = await t.install(['--global'], keys(UP + SPACE + ENTER))
+    expect(result.installed).toEqual([
+      { path: t.skill(join(t.homeDir, '.agents/skills')), scope: 'global', agents: ['shared'] },
+    ])
+  })
+
+  test('Antigravity has its own row globally, in the folder all its products read', async () => {
+    const t = setup()
+    const result = await t.install(['--global'], keys(DOWN + DOWN + SPACE + ENTER))
+    expect(result.installed.map((i) => i.path)).toEqual([
+      t.skill(join(t.homeDir, '.gemini/config/skills')),
+    ])
+  })
+
+  test('in a project Antigravity has no row: it reads the shared folder', async () => {
+    const t = setup()
+    const result = await t.install([], keys(DOWN + ENTER + UP + SPACE + ENTER))
+    expect(result.exitCode).toBe(0)
+    const asked = stripVTControlCharacters(result.stderr)
+    expect(asked.slice(asked.indexOf('Which agents?'))).not.toContain('Antigravity  ')
+    expect(asked).toContain('.github/skills')
+    expect(result.installed).toEqual([
+      { path: t.skill(join(t.cwd, '.agents/skills')), scope: 'project', agents: ['shared'] },
+    ])
+  })
+
+  test('several rows can be ticked, Space unticks, and the arrows wrap around', async () => {
+    const t = setup()
+    const result = await t.install(
+      ['--project'],
+      // Up from the first row lands on the last; tick it, tick the first, untick and retick.
+      keys(UP + SPACE + DOWN + SPACE + SPACE + SPACE + ENTER),
+    )
+    expect(result.installed.map((i) => i.path)).toEqual([
+      t.skill(join(t.cwd, '.claude/skills')),
+      t.skill(join(t.cwd, '.agents/skills')),
+    ])
+  })
+
+  test('--global or --project skips the first question', async () => {
+    const t = setup()
+    const result = await t.install(['--project'], keys(SPACE + ENTER))
+    expect(stripVTControlCharacters(result.stderr)).not.toContain('where?')
+    expect(result.installed[0]?.scope).toBe('project')
+  })
+
+  test('--agent skips the agents question', async () => {
+    const t = setup()
+    const result = await t.install(['--agent', 'codex'], keys(ENTER))
+    expect(stripVTControlCharacters(result.stderr)).not.toContain('Which agents?')
+    expect(result.installed[0]?.agents).toEqual(['codex'])
+  })
+
+  test('Ctrl-C in the picker exits 130, writes nothing and brings the cursor back', async () => {
+    const t = setup()
+    const result = await t.install([], keys(ENTER + SPACE + CTRL_C))
+    expect(result.exitCode).toBe(130)
+    expect(existsSync(join(t.homeDir, '.claude/skills'))).toBe(false)
+    expect(result.stderr.lastIndexOf('\x1b[?25h')).toBeGreaterThan(
+      result.stderr.lastIndexOf('\x1b[?25l'),
+    )
+  })
+
+  test('input ending in the first question exits 2', async () => {
+    const t = setup()
+    const result = await t.install([], keys(''))
+    expect(result.exitCode).toBe(2)
+  })
+
+  describe("where a picker can't be drawn (NO_COLOR, TERM=dumb, stderr piped)", () => {
+    const tty = (stdin: string): RunCliOptions => ({ stdin, stdinIsTTY: true })
+
+    test('the same rows are numbered, and nothing is marked', async () => {
+      const t = setup()
+      mkdirSync(join(t.homeDir, '.claude'))
+      const result = await t.install(['--global'], tty('1\n'))
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toMatch(/1\. Claude Code \(~\/\.claude\/skills\)/)
+      expect(result.stderr).toMatch(/2\. OpenCode \(~\/\.config\/opencode\/skills\)/)
+      expect(result.stderr).toMatch(/7\. Shared folder \(~\/\.agents\/skills\)\n/)
+      expect(result.stderr).not.toContain('[x]')
+      expect(result.stderr).not.toContain('\x1b[')
+      expect(result.installed.map((i) => i.agents)).toEqual([['claude-code']])
+    })
+
+    test('NO_COLOR on a terminal gets the numbered list too', async () => {
+      const t = setup()
+      const result = await t.install(['--global'], {
+        ...keys('1\n'),
+        env: { NO_COLOR: '1' },
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toMatch(/1\. Claude Code/)
+    })
+
+    test('the scope is asked first, then typed numbers choose the rows', async () => {
+      const t = setup()
+      const result = await t.install([], tty('p\n6\n'))
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toMatch(/Global .* or this project\?/)
+      expect(result.installed).toEqual([
+        {
+          path: t.skill(join(t.cwd, '.agents/skills')),
+          scope: 'project',
+          agents: ['shared'],
+        },
+      ])
+    })
+
+    test('a number that is not in the list exits 2', async () => {
+      const t = setup()
+      const result = await t.install(['--global'], tty('9\n'))
+      expect(result.exitCode).toBe(2)
+    })
+
+    test('Enter alone chooses nothing and exits 2', async () => {
+      const t = setup()
+      mkdirSync(join(t.homeDir, '.claude'))
+      const result = await t.install(['--global'], tty('\n'))
+      expect(result.exitCode).toBe(2)
+    })
+
+    test('Ctrl-C exits 130 and writes nothing', async () => {
+      const t = setup()
+      const controller = new AbortController()
+      controller.abort()
+      const result = await t.install([], { ...tty(''), signal: controller.signal })
+      expect(result.exitCode).toBe(130)
+      expect(existsSync(join(t.homeDir, '.agents'))).toBe(false)
+      expect(existsSync(join(t.cwd, '.agents'))).toBe(false)
+    })
   })
 })

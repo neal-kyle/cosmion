@@ -111,7 +111,7 @@ describe('skill uninstall (FR-106, FR-107)', () => {
     )
     // The listed agents are every agent using that folder, not only those installed for.
     const shared = removed.find((r) => r.path === t.skill(join(t.homeDir, '.agents/skills')))
-    expect(shared?.agents).toEqual(['codex', 'opencode', 'cursor', 'grok-build', 'copilot'])
+    expect(shared?.agents).toEqual(['codex', 'shared'])
     expect(existsSync(join(t.homeDir, '.claude/skills/cosmion'))).toBe(false)
     expect(existsSync(join(t.homeDir, '.claude/skills'))).toBe(true)
   })

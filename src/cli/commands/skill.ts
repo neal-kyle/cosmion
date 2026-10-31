@@ -1,17 +1,19 @@
-import { existsSync } from 'node:fs'
 import { readdir, rm, rmdir } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { z } from 'zod'
 import { CosmionError } from '../../core/errors.js'
 import type { Context } from '../context.js'
 import { defineCommand } from '../define.js'
-import { fancy, question } from '../output.js'
+import { fancy } from '../output.js'
+import { createPicker } from '../picker.js'
 import { code, pathLink, style } from '../pretty.js'
 import { createPrompt } from '../prompt.js'
 import {
   AGENT_NAMES,
   AGENTS,
   type Agent,
+  type AgentRow,
+  agentRows,
   allFolders,
   type Folder,
   findCopies,
@@ -92,29 +94,29 @@ const install = defineCommand({
       )
     }
 
-    const prompt = ctx.stdin.isTTY ? createPrompt(ctx) : undefined
+    const asker = ctx.stdin.isTTY ? createAsker(ctx) : undefined
     let folders: Folder[]
     try {
-      let agents: Agent[] = AGENTS.filter((agent) => input.agent.includes(agent.name))
-      if (agents.length === 0 && input.dir.length === 0) {
-        if (!prompt) {
-          throw new CosmionError(
-            'usage',
-            `Pass --agent <name> with --global or --project, or --dir <path>. Agents: ${AGENT_NAMES.join(', ')}.`,
-          )
-        }
-        agents = await askAgents(ctx, prompt)
+      let agents: readonly Agent[] = AGENTS.filter((agent) => input.agent.includes(agent.name))
+      const askForAgents = agents.length === 0 && input.dir.length === 0
+      if (askForAgents && !asker) {
+        throw new CosmionError(
+          'usage',
+          `Pass --agent <name> with --global or --project, or --dir <path>. Agents: ${AGENT_NAMES.join(', ')}.`,
+        )
       }
       let scope: Scope | undefined = input.global ? 'global' : input.project ? 'project' : undefined
-      if (agents.length > 0 && !scope) {
-        if (!prompt) {
+      if ((agents.length > 0 || askForAgents) && !scope) {
+        if (!asker) {
           throw new CosmionError('usage', 'Pass --global (all projects) or --project (this one).')
         }
-        scope = await askScope(ctx, prompt)
+        scope = await asker.scope()
       }
+      // Asked second: who shares a folder depends on the scope (FR-108).
+      if (askForAgents && asker && scope) agents = await asker.agents(scope)
       folders = [...(scope ? foldersFor(ctx, agents, scope) : []), ...dirFolders(ctx, input.dir)]
     } finally {
-      prompt?.close()
+      asker?.close()
     }
 
     // Check every target before writing any (FR-103).
@@ -161,67 +163,88 @@ const install = defineCommand({
       .join('\n'),
 })
 
-async function askAgents(ctx: Context, prompt: ReturnType<typeof createPrompt>): Promise<Agent[]> {
-  const found = AGENTS.filter((agent) => existsSync(join(ctx.homeDir, agent.home)))
-  if (fancy(ctx)) {
-    const width = Math.max(...AGENTS.map((agent) => agent.title.length))
-    ctx.stderr.write(
-      `${style('accent', '?')} ${style('bold', "Install Cosmion's skill for which agents?")}  ${style('dim', '✓ found on this computer')}\n`,
-    )
-    AGENTS.forEach((agent, index) => {
-      const mark = found.includes(agent) ? style('ok', '✓') : ' '
-      const number = style('accent', String(index + 1).padStart(3))
-      ctx.stderr.write(
-        `${number}  ${mark} ${agent.title.padEnd(width)}  ${style('dim', agent.project)}\n`,
-      )
-    })
-  } else {
-    ctx.stderr.write("Install Cosmion's skill for which agents? [x] = found on this computer\n")
-    AGENTS.forEach((agent, index) => {
-      const mark = found.includes(agent) ? 'x' : ' '
-      ctx.stderr.write(`  ${index + 1}. [${mark}] ${agent.title} (${agent.project})\n`)
-    })
-  }
-  const answer = (
-    await prompt.ask(
-      question(
-        ctx,
-        'Numbers, separated by commas or spaces (Enter for the [x] ones): ',
-        'Numbers',
-        'separated by commas or spaces, Enter for the ✓ ones',
-      ),
-    )
-  ).trim()
-  if (answer === '') {
-    if (found.length === 0) throw new CosmionError('usage', 'No agents chosen.')
-    return found
-  }
-  const chosen = answer.split(/[\s,]+/).map((word) => {
-    const agent = AGENTS[Number(word) - 1]
-    if (!/^\d+$/.test(word) || !agent) {
-      throw new CosmionError('usage', `"${word}" isn't a number from the list.`)
-    }
-    return agent
-  })
-  return AGENTS.filter((agent) => chosen.includes(agent))
+interface Asker {
+  scope(): Promise<Scope>
+  agents(scope: Scope): Promise<readonly Agent[]>
+  close(): void
 }
 
-async function askScope(ctx: Context, prompt: ReturnType<typeof createPrompt>): Promise<Scope> {
-  const answer = (
-    await prompt.ask(
-      question(
-        ctx,
-        'Global (all projects) or this project? [g/p]: ',
-        'Global (all projects) or this project?',
-        'g/p',
-      ),
-    )
-  )
-    .trim()
-    .toLowerCase()
-  if (answer === 'g' || answer === 'global') return 'global'
-  if (answer === 'p' || answer === 'project') return 'project'
-  throw new CosmionError('usage', 'Answer g (global) or p (this project).')
+const NO_AGENTS = 'No agents chosen.'
+
+/** Arrow keys where a picker can be drawn, typed answers where it can't. */
+function createAsker(ctx: Context): Asker {
+  return fancy(ctx) ? createPickerAsker(ctx) : createTypedAsker(ctx)
+}
+
+function createPickerAsker(ctx: Context): Asker {
+  const picker = createPicker(ctx)
+  return {
+    async scope() {
+      const scopes = [
+        { label: 'All projects', detail: 'in your home folder', scope: 'global' },
+        { label: 'This project', detail: 'in the current folder', scope: 'project' },
+      ] as const
+      const [chosen] = await picker.pick({
+        title: "Install Cosmion's skill where?",
+        doneLabel: 'Where',
+        rows: scopes,
+      })
+      if (chosen === undefined) throw new CosmionError('usage', SCOPE_NOT_CHOSEN)
+      return scopes[chosen]?.scope as Scope
+    },
+    async agents(scope) {
+      const rows = agentRows(scope)
+      const chosen = await picker.pick({
+        title: 'Which agents?',
+        doneLabel: 'Agents',
+        rows,
+        multiple: true,
+      })
+      if (chosen.length === 0) throw new CosmionError('usage', NO_AGENTS)
+      return agentsOf(chosen.map((index) => rows[index] as AgentRow))
+    },
+    close: picker.close,
+  }
+}
+
+function createTypedAsker(ctx: Context): Asker {
+  const prompt = createPrompt(ctx)
+  return {
+    async scope() {
+      const answer = (await prompt.ask('Global (all projects) or this project? [g/p]: '))
+        .trim()
+        .toLowerCase()
+      if (answer === 'g' || answer === 'global') return 'global'
+      if (answer === 'p' || answer === 'project') return 'project'
+      throw new CosmionError('usage', SCOPE_NOT_CHOSEN)
+    },
+    async agents(scope) {
+      const rows = agentRows(scope)
+      ctx.stderr.write("Install Cosmion's skill for which agents?\n")
+      rows.forEach(({ label, detail }, index) => {
+        ctx.stderr.write(`  ${index + 1}. ${label} (${detail})\n`)
+      })
+      const answer = (await prompt.ask('Numbers, separated by commas or spaces: ')).trim()
+      if (answer === '') throw new CosmionError('usage', NO_AGENTS)
+      return agentsOf(
+        answer.split(/[\s,]+/).map((word) => {
+          const row = rows[Number(word) - 1]
+          if (!/^\d+$/.test(word) || !row) {
+            throw new CosmionError('usage', `"${word}" isn't a number from the list.`)
+          }
+          return row
+        }),
+      )
+    },
+    close: prompt.close,
+  }
+}
+
+const SCOPE_NOT_CHOSEN = 'Answer g (global) or p (this project).'
+
+/** The rows' agents, in the table's order. */
+function agentsOf(rows: readonly AgentRow[]): Agent[] {
+  return AGENTS.filter((agent) => rows.some((row) => row.agent === agent))
 }
 
 const update = defineCommand({

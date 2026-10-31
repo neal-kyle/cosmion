@@ -62,7 +62,7 @@ libraries) belongs to the plan and isn't repeated here. API details are in
 
 - Q: How does `SKILL.md` reach an agent? → A: `cosmion skill install` copies it into the agent's skills folder. It's part of v0.1. `npm install` doesn't ask or install anything itself: npm runs install scripts without a terminal and hides their output, many installs have no one to answer, and the package has no install scripts (FR-060).
 - Q: Which agents? → A: Claude Code, Codex, OpenCode, Antigravity, Cursor, Grok Build and Copilot (FR-108); `--dir` installs into any other folder. Not Gemini CLI (replaced by Antigravity's CLI). Not Muse Code until its folders are confirmed from Meta's own documentation; `--dir` covers it meanwhile.
-- Q: Which folder for each agent, when many read the shared `.agents/skills` as well as their own? → A: As Vercel's `npx skills` does: one fixed folder per agent and scope, `.agents/skills` wherever the agent reads it, otherwise its own. Agents sharing a folder share one copy. A user who wants an agent's own folder passes it with `--dir`. An agent that reads both `.claude/skills` and `.agents/skills` (OpenCode, Grok Build) sees two identical copies when Claude Code is chosen too; that's accepted, as Vercel does.
+- Q: Which folder for each agent, when many read the shared `.agents/skills` as well as their own? → A: One fixed folder per agent and scope: its own where it has one, so a skill can go to one agent only (Codex may have image generation of its own, for instance), and `.agents/skills` for those without one. `shared` chooses that folder for every agent reading it. An agent that reads both `.claude/skills` and `.agents/skills` (OpenCode, Cursor, Grok Build; Copilot in a project) sees two identical copies when Claude Code is chosen too; that's accepted, as Vercel does.
 - Q: Global or project? → A: Either, chosen at install. A project install goes in the project's folder, so it can be committed and shared.
 - Q: Does the installed skill update with the CLI? → A: Not on its own. As `gh skill update` does, `cosmion skill update` finds Cosmion's copies by looking in the agents' folders and rewrites those from another version; `doctor` warns when one is out of date. An old copy still works; it just doesn't mention newer options. No links: a Node version manager moves the package, Windows often can't make them, and one agent (Cursor) is reported not to load them.
 - Q: Should `skill update --all` update every project ever installed into? → A: No. It would need a lasting list of project paths; running `skill update` in that project fixes it.
@@ -381,14 +381,15 @@ version; check which files exist, their contents and the JSON output.
 
 **Acceptance Scenarios**:
 
-1. **Given** a terminal, **When** I run `cosmion skill install`, **Then** it lists the
-   supported agents with those found on this machine pre-selected, asks whether to install
-   globally or in this project, and installs `SKILL.md` once per folder needed.
+1. **Given** a terminal, **When** I run `cosmion skill install`, **Then** it asks whether to
+   install globally or in this project, lists each agent with a folder of its own and the
+   shared folder, nothing selected, and installs `SKILL.md` once per folder needed.
 2. **Given** no terminal, **When** an agent runs
    `cosmion skill install --agent claude-code --global --json`, **Then** it installs
    without asking; without `--agent` or `--dir` it exits 2 saying what to pass.
-3. **Given** Codex, OpenCode and Copilot chosen, **When** I install, **Then** one copy is
-   written, in `.agents/skills`, listed with all three.
+3. **Given** OpenCode chosen, **When** I install, **Then** one copy is written, in its own
+   folder, and Codex doesn't get it. Given the shared folder chosen, one copy is written,
+   in `.agents/skills`, for every agent that reads it.
 4. **Given** a copy from an older version, **When** I run `cosmion doctor`, **Then** it
    warns, with `cosmion skill update` as the fix, and that command updates it.
 5. **Given** a `cosmion/SKILL.md` that Cosmion didn't install, **When** I install to that
@@ -436,7 +437,7 @@ version; check which files exist, their contents and the JSON output.
 - **`regen` of an entry whose model was removed:** exits 5.
 - **`regen` of an entry without a seed** (its model has no `seed` option): re-runs with
   the same settings; a warning on stderr says the result won't be identical.
-- **Agents sharing a folder** (Codex, OpenCode, Cursor, Grok Build and Copilot use
+- **Agents using one folder** (`codex`, `shared` and, in a project, `antigravity` use
   `.agents/skills`): one copy, listed with every chosen agent (FR-102).
 - **Claude Code plus OpenCode or Grok Build:** those two also read `.claude/skills`, so
   they see two identical copies. Accepted (see Clarifications); Grok Build keeps one per
@@ -791,9 +792,11 @@ version; check which files exist, their contents and the JSON output.
   folder an agent loads skills from). A project install uses the current folder as the
   project root. Missing folders are created.
 - **FR-101**: When stdin is a TTY and neither `--agent` nor `--dir` is passed, `install`
-  MUST list the agents, numbered, with those whose home folder exists (FR-108)
-  pre-selected (Enter accepts the selection), then ask global or project unless one was
-  passed. Without a TTY, it exits 2 when neither `--agent` nor `--dir` is passed, or when
+  MUST ask global or project unless one was passed, then list every folder for that scope:
+  each agent with its own, then the shared one, nothing selected. Arrow keys move, Space
+  selects, Enter confirms; Enter with nothing selected asks again. Where a picker can't be
+  drawn (`NO_COLOR`, `TERM=dumb`, stderr not a TTY), the same rows are numbered and the
+  answer is typed; no answer exits 2. Without a TTY, it exits 2 when neither `--agent` nor `--dir` is passed, or when
   `--agent` is passed without `--global` or `--project`. Passing both `--global` and
   `--project`, or either with only `--dir`, exits 2.
 - **FR-102**: Each distinct folder MUST be written once, and the result lists it with
@@ -817,20 +820,25 @@ version; check which files exist, their contents and the JSON output.
 - **FR-108**: The agents and the one folder Cosmion uses for each (`~` is the user's home
   folder on every system; project folders are relative to the current folder):
 
-  | `--agent` | Global | Project | Home folder (pre-selects) |
-  |-----------|--------|---------|---------------------------|
-  | `claude-code` | `~/.claude/skills` | `.claude/skills` | `~/.claude` |
-  | `codex` | `~/.agents/skills` | `.agents/skills` | `~/.codex` |
-  | `opencode` | `~/.agents/skills` | `.agents/skills` | `~/.config/opencode` |
-  | `antigravity` | `~/.gemini/config/skills` (app) and `~/.gemini/antigravity-cli/skills` (CLI) | `.agents/skills` | `~/.gemini` |
-  | `cursor` | `~/.agents/skills` | `.agents/skills` | `~/.cursor` |
-  | `grok-build` | `~/.agents/skills` | `.agents/skills` | `~/.grok` |
-  | `copilot` | `~/.agents/skills` | `.agents/skills` | `~/.copilot` |
+  | `--agent` | Global | Project |
+  |-----------|--------|---------|
+  | `claude-code` | `~/.claude/skills` | `.claude/skills` |
+  | `codex` | `~/.agents/skills` | `.agents/skills` |
+  | `opencode` | `~/.config/opencode/skills` | `.opencode/skills` |
+  | `antigravity` | `~/.gemini/config/skills` | `.agents/skills` |
+  | `cursor` | `~/.cursor/skills` | `.cursor/skills` |
+  | `grok-build` | `~/.grok/skills` | `.grok/skills` |
+  | `copilot` | `~/.copilot/skills` | `.github/skills` |
+  | `shared` | `~/.agents/skills` | `.agents/skills` |
 
   Each agent's documentation (checked with Context7 on 2026-10-29) lists the folder used.
-  Antigravity's app and CLI are separate products, so its global install writes both.
-  Cursor's own CLI is reported not to list skills from `~/.agents/skills` in its `/` menu,
-  though its agent loads them; `--dir ~/.cursor/skills` is the alternative.
+  Rechecked on 2026-10-31: Copilot 1.0.105, Codex and Grok Build 1.0.70 by running them
+  against test folders; Antigravity, OpenCode and Cursor against their documentation.
+  Antigravity's app, IDE and CLI all read `~/.gemini/config/skills`. Grok Build reads
+  `.agents/skills` in a trusted project, though its documentation lists only `.grok/skills`.
+  An agent's own folder gives the skill to that agent alone, as far as Cosmion can: some
+  agents also read others' folders (Cursor and Grok Build read Claude Code's, Grok Build
+  reads Cursor's). `shared` is for every agent reading `.agents/skills`.
 
 **Release**
 

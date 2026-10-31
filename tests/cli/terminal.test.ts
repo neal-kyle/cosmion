@@ -292,19 +292,18 @@ describe('nothing a person sees is left unstyled', () => {
     expect(stripVTControlCharacters(out.stdout)).toContain('✓ Removed the saved key.')
   })
 
-  test('skill: the menu, questions and results are styled', async () => {
+  test('skill: the picker and results are styled', async () => {
     const { cli } = setup()
     const install = await cli(['skill', 'install'], {
       ...TERMINAL,
-      stdin: '1\ng\n',
+      stdin: '\r \r',
       stdinIsTTY: true,
     })
     expect(install.exitCode).toBe(0)
     const asked = stripVTControlCharacters(install.stderr)
     expect(install.stderr).toContain(ANSI)
     expect(asked).toContain('Claude Code')
-    expect(asked).toContain('Enter for the ✓ ones')
-    expect(asked).not.toContain('[x]')
+    expect(asked).toContain('space select')
     expect(stripVTControlCharacters(install.stdout)).toContain('✓ Installed for Claude Code')
   })
 

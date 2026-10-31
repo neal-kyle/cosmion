@@ -5,63 +5,40 @@ import { CosmionError } from '../core/errors.js'
 import type { Context } from './context.js'
 import { readVersion } from './version.js'
 
+const SHARED_FOLDER = '.agents/skills'
+
 /**
- * The agents and the one folder Cosmion uses for each, per scope (FR-108): the shared
- * `.agents/skills` wherever the agent reads it, otherwise its own. Global folders are under
- * the home folder, project folders under the current one. `home` is the folder whose
- * presence pre-selects the agent.
+ * The agents and the one folder Cosmion uses for each, per scope (FR-108): the agent's own
+ * where it has one, so that it alone gets the skill. `shared` stands for everything that
+ * reads `.agents/skills`. Global folders are under the home folder, project folders under
+ * the current one.
  */
 export const AGENTS = [
   {
     name: 'claude-code',
     title: 'Claude Code',
-    global: ['.claude/skills'],
+    global: '.claude/skills',
     project: '.claude/skills',
-    home: '.claude',
   },
-  {
-    name: 'codex',
-    title: 'Codex',
-    global: ['.agents/skills'],
-    project: '.agents/skills',
-    home: '.codex',
-  },
+  // Codex has no folder of its own: the shared one is where it reads.
+  { name: 'codex', title: 'Codex', global: SHARED_FOLDER, project: SHARED_FOLDER },
   {
     name: 'opencode',
     title: 'OpenCode',
-    global: ['.agents/skills'],
-    project: '.agents/skills',
-    home: '.config/opencode',
+    global: '.config/opencode/skills',
+    project: '.opencode/skills',
   },
   {
     name: 'antigravity',
     title: 'Antigravity',
-    // The app and the CLI are separate products, each with its own global folder.
-    global: ['.gemini/config/skills', '.gemini/antigravity-cli/skills'],
-    project: '.agents/skills',
-    home: '.gemini',
+    // Read by all of Antigravity's products: the app, the IDE and the CLI.
+    global: '.gemini/config/skills',
+    project: SHARED_FOLDER,
   },
-  {
-    name: 'cursor',
-    title: 'Cursor',
-    global: ['.agents/skills'],
-    project: '.agents/skills',
-    home: '.cursor',
-  },
-  {
-    name: 'grok-build',
-    title: 'Grok Build',
-    global: ['.agents/skills'],
-    project: '.agents/skills',
-    home: '.grok',
-  },
-  {
-    name: 'copilot',
-    title: 'Copilot',
-    global: ['.agents/skills'],
-    project: '.agents/skills',
-    home: '.copilot',
-  },
+  { name: 'cursor', title: 'Cursor', global: '.cursor/skills', project: '.cursor/skills' },
+  { name: 'grok-build', title: 'Grok Build', global: '.grok/skills', project: '.grok/skills' },
+  { name: 'copilot', title: 'Copilot', global: '.copilot/skills', project: '.github/skills' },
+  { name: 'shared', title: 'Shared folder', global: SHARED_FOLDER, project: SHARED_FOLDER },
 ] as const
 
 export type Agent = (typeof AGENTS)[number]
@@ -69,6 +46,24 @@ export type AgentName = Agent['name']
 export type Scope = 'global' | 'project'
 
 export const AGENT_NAMES = AGENTS.map((agent) => agent.name)
+
+/** A choice in `skill install`: one agent's folder, or the shared one. */
+export interface AgentRow {
+  label: string
+  detail: string
+  agent: Agent
+}
+
+/** Every folder for the scope, the shared one last. An agent using it needs no row of its own. */
+export function agentRows(scope: Scope): AgentRow[] {
+  return AGENTS.flatMap((agent): AgentRow[] => {
+    const folder = scope === 'global' ? agent.global : agent.project
+    const detail = scope === 'global' ? `~/${folder}` : folder
+    return agent.name === 'shared' || folder !== SHARED_FOLDER
+      ? [{ label: agent.title, detail, agent }]
+      : []
+  })
+}
 
 /** A skills folder and the agents that use it there. */
 export interface Folder {
@@ -81,13 +76,11 @@ export interface Folder {
 export function foldersFor(ctx: Context, agents: readonly Agent[], scope: Scope): Folder[] {
   const byPath = new Map<string, Folder>()
   for (const agent of agents) {
-    const relative = scope === 'global' ? agent.global : [agent.project]
-    const base = scope === 'global' ? ctx.homeDir : ctx.cwd
-    for (const folder of relative.map((path) => join(base, path))) {
-      const entry = byPath.get(folder) ?? { folder, scope, agents: [] }
-      entry.agents.push(agent.name)
-      byPath.set(folder, entry)
-    }
+    const folder =
+      scope === 'global' ? join(ctx.homeDir, agent.global) : join(ctx.cwd, agent.project)
+    const entry = byPath.get(folder) ?? { folder, scope, agents: [] }
+    entry.agents.push(agent.name)
+    byPath.set(folder, entry)
   }
   return [...byPath.values()]
 }

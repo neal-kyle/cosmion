@@ -95,7 +95,8 @@ src/
     ├── gen-options.ts     Option definitions shared by gen, price, models rank, batch
     ├── key.ts             Which key is in use: env var, then settings file
     ├── hidden-input.ts    Read a line from a TTY without echoing it
-    ├── prompt.ts          Read a visible line from a TTY (skill install's questions)
+    ├── prompt.ts          Read a visible line from a TTY (skill install's typed questions)
+    ├── picker.ts          Questions answered with the arrow keys (skill install)
     ├── skills.ts          The agent folder table; write, find, update and remove
     │                      Cosmion's SKILL.md copies
     ├── catalog-cache.ts   Load the cached catalog; refresh when stale, missing or asked
@@ -384,7 +385,7 @@ Doctor's `skill` check (FR-097) uses `skills.ts` to find copies, and reads only.
 Modelled on Vercel's `npx skills` (folders) and `gh skill update` (updates).
 
 - **One table.** `skills.ts` holds FR-108's table as data: per agent, one global
-  folder (two for Antigravity), one project folder and its home folder. `install`,
+  folder and one project folder. `install`,
   `update`, `uninstall`, `doctor` and the agent list in `--help` all read it. Chosen
   agents resolve to folders; a `Set` of paths gives one write per folder (FR-102).
 - **What's written.** The package's own `SKILL.md`, found like `package.json`
@@ -400,11 +401,13 @@ Modelled on Vercel's `npx skills` (folders) and `gh skill update` (updates).
 - **Copies, not links.** A Node version manager (nvm, fnm, Volta) moves the package when
   Node changes, Windows often refuses to make links, and Cursor is reported not to load
   linked skills.
-- **Questions on a TTY (FR-101).** `prompt.ts` reads one visible line, like
-  `hidden-input.ts` without hiding it; Ctrl-C gives the same `InterruptedError`. The list
-  goes to stderr, numbered, pre-selected entries marked, each with its folder; the answer
-  is numbers separated by commas or spaces, Enter keeps the selection. Then `Global (all
-  projects) or this project? [g/p]`. No library: two questions don't earn one.
+- **Questions on a TTY (FR-101).** `picker.ts` answers them with the arrow keys, in raw
+  mode like `hidden-input.ts`, drawn on stderr; Ctrl-C gives the same `InterruptedError`.
+  Global or project comes first, as who shares a folder depends on it. Where a picker can't
+  be drawn, `prompt.ts` reads typed answers to the same questions: `Global (all projects)
+  or this project? [g/p]`, then numbers separated by commas or spaces. No library: two
+  questions don't earn one. Nothing is detected: every agent is always offered, and a
+  folder's existence says little about what's installed.
 - **Home folder** comes from a new `homeDir` in the context (`os.homedir()` in `main.ts`),
   so tests point it at a temp folder.
 
