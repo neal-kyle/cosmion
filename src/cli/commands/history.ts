@@ -3,6 +3,7 @@ import { CosmionError } from '../../core/errors.js'
 import { defineCommand } from '../define.js'
 import { type LedgerEntry, ledgerEntrySchema, readLedger } from '../ledger.js'
 import { formatTime, formatUsd, table } from '../output.js'
+import { fitTable, shortTime, style } from '../pretty.js'
 
 const outputSchema = z.strictObject({ entries: z.array(ledgerEntrySchema) })
 
@@ -43,19 +44,56 @@ export const history = defineCommand({
     entries.length === 0
       ? ''
       : table([['ID', 'TIME', 'MODEL', 'COST', 'PROMPT', 'PATH'], ...entries.map(row)]),
+  pretty: ({ entries }, columns) =>
+    entries.length === 0
+      ? style('dim', 'No generations yet.')
+      : fitTable(
+          [
+            { header: 'id', value: (entry) => entry.id, role: () => 'accent' },
+            {
+              header: 'time',
+              value: (entry) => shortTime(entry.created_at),
+              role: () => 'dim',
+              drop: 2,
+            },
+            {
+              header: 'cost',
+              value: costText,
+              role: (entry) => (entry.cost_usd === null ? 'dim' : undefined),
+              right: true,
+            },
+            { header: 'model', value: (entry) => entry.model, drop: 3 },
+            { header: 'prompt', value: (entry) => shorten(entry.prompt), min: 16 },
+            {
+              header: 'path',
+              value: pathText,
+              path: (entry) => entry.images[0]?.path,
+              drop: 4,
+            },
+          ],
+          entries,
+          columns,
+        ),
 })
 
 function row(entry: LedgerEntry): string[] {
-  const [first, ...rest] = entry.images
-  const path = first ? first.path + (rest.length ? ` (+${rest.length} more)` : '') : '-'
   return [
     entry.id,
     formatTime(entry.created_at),
     entry.model,
-    entry.cost_usd === null ? 'unknown' : formatUsd(entry.cost_usd),
+    costText(entry),
     shorten(entry.prompt),
-    path,
+    pathText(entry),
   ]
+}
+
+function costText(entry: LedgerEntry): string {
+  return entry.cost_usd === null ? 'unknown' : formatUsd(entry.cost_usd)
+}
+
+function pathText(entry: LedgerEntry): string {
+  const [first, ...rest] = entry.images
+  return first ? first.path + (rest.length ? ` (+${rest.length} more)` : '') : '-'
 }
 
 function shorten(prompt: string): string {

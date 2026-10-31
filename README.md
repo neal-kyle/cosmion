@@ -66,7 +66,8 @@ Set `COSMION_MODEL` to stop passing `-m` every time.
 | `cosmion doctor` | Check that everything is set up |
 | `cosmion schema` | The whole interface as JSON, for agents |
 
-`cosmion <command> --help` shows each command's options.
+`cosmion <command> --help` shows each command's options. On a terminal, output has color and
+tables fit the window; piped output stays plain, and `NO_COLOR=1` turns the styling off.
 
 ## With an agent
 

@@ -22,6 +22,8 @@ Where things are:
 - `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Cosmion
   uses, including what was checked against the live API. Check it before speccing
   anything that talks to OpenRouter.
+- `DESIGN.md`: how the CLI looks on a terminal. A command's terminal output goes in its
+  `pretty` function; its `text` is for pipes and agents and doesn't change with the look.
 
 ## Commands
 

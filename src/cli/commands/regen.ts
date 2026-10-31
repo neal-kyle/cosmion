@@ -1,8 +1,8 @@
 import { CosmionError } from '../../core/errors.js'
 import { defineCommand } from '../define.js'
-import { execute, prepare } from '../generate.js'
+import { announce, execute, prepare, savedPaths } from '../generate.js'
 import { ledgerEntrySchema, readLedger } from '../ledger.js'
-import { formatUsd, warn } from '../output.js'
+import { warn } from '../output.js'
 
 export const regen = defineCommand({
   name: 'regen',
@@ -45,12 +45,11 @@ export const regen = defineCommand({
     if (original.settings.seed === undefined) {
       warn(ctx, `${original.id} has no seed, so the result won't be identical.`)
     }
+    const startedAt = Date.now()
     const entry = await execute(ctx, { ...prepared, regenOf: original.id })
-    const cost = entry.cost_usd === null ? 'an unknown cost' : formatUsd(entry.cost_usd)
-    ctx.stderr.write(
-      `Generated ${entry.id} (again from ${original.id}) with ${entry.model} for ${cost}.\n`,
-    )
+    announce(ctx, entry, startedAt, original.id)
     return { data: entry }
   },
   text: (entry) => entry.images.map((image) => image.path).join('\n'),
+  pretty: savedPaths,
 })

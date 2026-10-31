@@ -87,8 +87,10 @@ src/
     ├── name.ts            The tool's name, once (see Paths and test hooks)
     ├── paths.ts           Config, data and cache folders (env-paths or COSMION_HOME)
     ├── exit-codes.ts      The FR-040 table, once (used by run.ts and schema)
-    ├── output.ts          JSON/text printing, stderr warnings, colors, spinner,
+    ├── output.ts          JSON/text printing, stderr warnings, spinner,
     │                      formatUsd, key redaction
+    ├── pretty.ts          Styling for a terminal: colors, links, tables that fit the window
+    ├── home.ts            What bare `cosmion` shows on a terminal
     ├── define.ts          defineCommand() and the option-definition type
     ├── gen-options.ts     Option definitions shared by gen, price, models rank, batch
     ├── key.ts             Which key is in use: env var, then settings file
@@ -165,7 +167,8 @@ export const price = defineCommand({
 - Commands return data; they don't print results. `run.ts` prints exactly one JSON object
   with `--json`, otherwise `text(data)`. Warnings and progress go through `ctx.warn()` /
   a spinner on stderr; the spinner and colors appear only when stderr is a TTY and
-  `NO_COLOR` is unset.
+  `NO_COLOR` is unset. A command's `pretty(data, columns)`, when it has one, replaces
+  `text(data)` under the same conditions for stdout; everything else gets the plain text.
 - `core` throws `CosmionError` with a code from FR-040 (`usage`, `auth`, `credits`,
   `not_found`, `rate_limited`, `upstream`) and its `retryable` flag (the timeout is the
   one `upstream` error that isn't retryable); `run.ts` maps it through

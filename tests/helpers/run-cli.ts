@@ -25,6 +25,8 @@ export interface RunCliOptions {
   stdinIsTTY?: boolean
   stdoutIsTTY?: boolean
   stderrIsTTY?: boolean
+  /** The terminal's width, on both streams. */
+  columns?: number
   signal?: AbortSignal
   platform?: NodeJS.Platform
   nodeVersion?: string
@@ -80,12 +82,14 @@ export function createTestContext(options: Omit<RunCliOptions, 'commands'> = {})
         stdout += text
       },
       isTTY: options.stdoutIsTTY ?? false,
+      columns: options.columns,
     },
     stderr: {
       write(text) {
         stderr += text
       },
       isTTY: options.stderrIsTTY ?? false,
+      columns: options.columns,
     },
     fetch: options.fetch ?? noFetch,
     baseUrl: 'https://openrouter.test/api/v1',

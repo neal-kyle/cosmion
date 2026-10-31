@@ -4,6 +4,7 @@ import { CosmionError } from '../../core/errors.js'
 import { defineCommand } from '../define.js'
 import { ledgerEntrySchema, readLedger } from '../ledger.js'
 import { formatTime, formatUsd } from '../output.js'
+import { fields, pathLink, style } from '../pretty.js'
 
 const imageSchema = ledgerEntrySchema.shape.images.element
 const outputSchema = ledgerEntrySchema.extend({
@@ -30,6 +31,7 @@ export const show = defineCommand({
     return { data: { ...entry, images } }
   },
   text: showText,
+  pretty: showPretty,
 })
 
 async function exists(path: string): Promise<boolean> {
@@ -65,4 +67,30 @@ function showText(entry: Shown): string {
   if (entry.regen_of) lines.push(`Regen of:  ${entry.regen_of}`)
   if (entry.generation_id) lines.push(`Generation: ${entry.generation_id}`)
   return lines.join('\n')
+}
+
+function showPretty(entry: Shown, columns: number): string {
+  const settings = Object.entries(entry.settings).map(([name, value]) => `${name}=${value}`)
+  const rows: [string, string][] = [
+    ['Model', entry.model + (entry.provider ? ` (${entry.provider})` : '')],
+    ['Cost', style('bold', entry.cost_usd === null ? 'unknown' : formatUsd(entry.cost_usd))],
+    ['Settings', settings.length ? settings.join(', ') : 'none'],
+    ['Prompt', entry.prompt],
+    ...entry.references.map((ref): [string, string] => ['Reference', ref]),
+  ]
+  if (entry.images.length === 0) rows.push(['Images', 'none saved'])
+  for (const image of entry.images) {
+    const size =
+      image.width === null ? image.format : `${image.width}×${image.height} ${image.format}`
+    rows.push(['Image', `${pathLink(image.path)}  ${style('dim', size)}`])
+    if (!image.exists) rows.push(['', `${style('warn', '!')} missing: no longer at this path`])
+  }
+  if (entry.batch_id) rows.push(['Batch', `${entry.batch_id}, row ${entry.row}`])
+  if (entry.regen_of) rows.push(['Regen of', entry.regen_of])
+  if (entry.generation_id) rows.push(['Generation', entry.generation_id])
+  return [
+    `${style('strong', entry.id)}  ${style('dim', formatTime(entry.created_at))}`,
+    '',
+    ...fields(rows, columns),
+  ].join('\n')
 }

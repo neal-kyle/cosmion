@@ -7,7 +7,8 @@ import { defineCommand } from '../define.js'
 import { readHidden } from '../hidden-input.js'
 import { envKey, findKey, KEY_ENV, removeSavedKey, saveKey } from '../key.js'
 import { TITLE } from '../name.js'
-import { formatUsd, warn } from '../output.js'
+import { formatUsd, question, warn } from '../output.js'
+import { code, fields, style } from '../pretty.js'
 
 const statusSchema = z.strictObject({
   source: z.enum(['env', 'file', 'none']),
@@ -70,6 +71,17 @@ const status = defineCommand({
     return { data }
   },
   text: statusText,
+  pretty: (data, columns) => {
+    if (data.source === 'none' || !data.valid) return code(statusText(data))
+    // statusText's `Label:  value` lines, restyled.
+    const rows = statusText(data)
+      .split('\n')
+      .map((line): [string, string] => {
+        const [label = '', ...value] = line.split(':')
+        return [label, code(value.join(':').trim())]
+      })
+    return fields(rows, columns).join('\n')
+  },
 })
 
 const logout = defineCommand({
@@ -80,6 +92,10 @@ const logout = defineCommand({
     return { data: { removed: await removeSavedKey(ctx) } }
   },
   text: (data) => (data.removed ? 'Removed the saved key.' : 'There was no saved key.'),
+  pretty: (data) =>
+    data.removed
+      ? `${style('ok', '✓')} Removed the saved key.`
+      : style('dim', 'There was no saved key.'),
 })
 
 export const auth = defineCommand({
@@ -107,6 +123,8 @@ export const auth = defineCommand({
     return { data: { saved: true as const, label } }
   },
   text: (data) => (data.label ? `Saved the key (${data.label}).` : 'Saved the key.'),
+  pretty: (data) =>
+    `${style('ok', '✓')} Saved the key${data.label ? `  ${style('dim', data.label)}` : ''}`,
 })
 
 async function readKey(ctx: Context, fromStdin: boolean): Promise<string> {
@@ -121,7 +139,15 @@ async function readKey(ctx: Context, fromStdin: boolean): Promise<string> {
       'No terminal to type the key into. Pass it on stdin with --stdin, e.g. `cosmion auth --stdin < key.txt`.',
     )
   }
-  return readHidden(ctx, 'OpenRouter API key (hidden as you type): ')
+  return readHidden(
+    ctx,
+    question(
+      ctx,
+      'OpenRouter API key (hidden as you type): ',
+      'OpenRouter API key',
+      'hidden as you type',
+    ),
+  )
 }
 
 function statusText(data: Status): string {

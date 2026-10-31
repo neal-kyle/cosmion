@@ -4,6 +4,7 @@ import { toNano, toUsd } from '../../core/money.js'
 import { defineCommand } from '../define.js'
 import { type LedgerEntry, readLedger } from '../ledger.js'
 import { formatTime, formatUsd, table } from '../output.js'
+import { bar, fitTable, shortDate, style } from '../pretty.js'
 
 const totalsSchema = z.strictObject({
   total_usd: z.number(),
@@ -24,6 +25,7 @@ type Usage = z.infer<typeof outputSchema>
 type Totals = z.infer<typeof totalsSchema>
 
 const DEFAULT_DAYS = 30
+const BAR_CELLS = 12
 
 export const usage = defineCommand({
   name: 'usage',
@@ -88,6 +90,7 @@ export const usage = defineCommand({
     return { data }
   },
   text: usageText,
+  pretty: usagePretty,
 })
 
 function totals(entries: readonly LedgerEntry[]): Totals {
@@ -152,6 +155,51 @@ function nextDay(day: Date): Date {
 function dayKey(date: Date): string {
   const two = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
+}
+
+function usagePretty(data: Usage, columns: number): string {
+  // `until` is the moment after the period ends: for a whole day, the next midnight.
+  const lastDay = new Date(new Date(data.until).getTime() - 1).toISOString()
+  const heading = style('bold', `${shortDate(data.since)} – ${shortDate(lastDay)}`)
+  if (data.generations === 0) {
+    return [heading, '', style('dim', 'No generations in this period.')].join('\n')
+  }
+  type Row = Totals & { key: string; isTotal?: boolean }
+  const rows: Row[] = [...data.groups, { key: 'Total', ...data, isTotal: true }]
+  const highest = Math.max(...data.groups.map((group) => group.total_usd))
+  // A cost we were never told is unknown, not $0; a part of a total is noted below.
+  const isUnknown = (row: Row) => row.total_usd === 0 && row.unknown_cost_count > 0
+  const table = fitTable<Row>(
+    [
+      { header: data.by === 'day' ? 'day' : 'model', value: (row) => row.key, min: 16 },
+      {
+        header: 'cost',
+        value: (row) => (isUnknown(row) ? 'unknown' : formatUsd(row.total_usd)),
+        role: (row) => (row.total_usd === 0 ? 'dim' : undefined),
+        right: true,
+      },
+      {
+        header: '',
+        value: (row) =>
+          row.isTotal || row.total_usd === 0 ? '' : bar(row.total_usd, highest, BAR_CELLS),
+        drop: 3,
+      },
+      { header: 'generations', value: (row) => String(row.generations), right: true, drop: 1 },
+      { header: 'images', value: (row) => String(row.images), right: true, drop: 2 },
+    ],
+    rows,
+    columns,
+    { total: true },
+  )
+  const lines = [heading, '', table]
+  if (data.unknown_cost_count > 0) {
+    const count = data.unknown_cost_count
+    lines.push(
+      '',
+      `${style('warn', '!')} ${count} ${count === 1 ? 'generation has' : 'generations have'} an unknown cost, not included above.`,
+    )
+  }
+  return lines.join('\n')
 }
 
 function usageText(data: Usage): string {

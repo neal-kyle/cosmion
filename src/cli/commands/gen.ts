@@ -1,8 +1,7 @@
 import { defineCommand } from '../define.js'
 import { genOptions, modelOption } from '../gen-options.js'
-import { execute, prepare } from '../generate.js'
+import { announce, execute, prepare, savedPaths } from '../generate.js'
 import { ledgerEntrySchema } from '../ledger.js'
-import { formatUsd } from '../output.js'
 
 export const gen = defineCommand({
   name: 'gen',
@@ -46,10 +45,11 @@ export const gen = defineCommand({
       out: input.out,
       force: input.force,
     })
+    const startedAt = Date.now()
     const entry = await execute(ctx, prepared)
-    const cost = entry.cost_usd === null ? 'an unknown cost' : formatUsd(entry.cost_usd)
-    ctx.stderr.write(`Generated ${entry.id} with ${entry.model} for ${cost}.\n`)
+    announce(ctx, entry, startedAt)
     return { data: entry }
   },
   text: (entry) => entry.images.map((image) => image.path).join('\n'),
+  pretty: savedPaths,
 })

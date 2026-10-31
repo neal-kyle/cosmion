@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { CosmionError } from '../../core/errors.js'
 import type { Context } from '../context.js'
 import { defineCommand } from '../define.js'
+import { fancy, question } from '../output.js'
+import { code, pathLink, style } from '../pretty.js'
 import { createPrompt } from '../prompt.js'
 import {
   AGENT_NAMES,
@@ -108,7 +110,7 @@ const install = defineCommand({
         if (!prompt) {
           throw new CosmionError('usage', 'Pass --global (all projects) or --project (this one).')
         }
-        scope = await askScope(prompt)
+        scope = await askScope(ctx, prompt)
       }
       folders = [...(scope ? foldersFor(ctx, agents, scope) : []), ...dirFolders(ctx, input.dir)]
     } finally {
@@ -149,17 +151,46 @@ const install = defineCommand({
           : `Installed: ${path}`
       })
       .join('\n'),
+  pretty: ({ installed }) =>
+    installed
+      .map(({ path, agents }) => {
+        const titles = agents.map((name) => AGENTS.find((agent) => agent.name === name)?.title)
+        const label = titles.length > 0 ? `Installed for ${titles.join(', ')}` : 'Installed'
+        return `${style('ok', '✓')} ${label}  ${pathLink(path)}`
+      })
+      .join('\n'),
 })
 
 async function askAgents(ctx: Context, prompt: ReturnType<typeof createPrompt>): Promise<Agent[]> {
   const found = AGENTS.filter((agent) => existsSync(join(ctx.homeDir, agent.home)))
-  ctx.stderr.write("Install Cosmion's skill for which agents? [x] = found on this computer\n")
-  AGENTS.forEach((agent, index) => {
-    const mark = found.includes(agent) ? 'x' : ' '
-    ctx.stderr.write(`  ${index + 1}. [${mark}] ${agent.title} (${agent.project})\n`)
-  })
+  if (fancy(ctx)) {
+    const width = Math.max(...AGENTS.map((agent) => agent.title.length))
+    ctx.stderr.write(
+      `${style('accent', '?')} ${style('bold', "Install Cosmion's skill for which agents?")}  ${style('dim', '✓ found on this computer')}\n`,
+    )
+    AGENTS.forEach((agent, index) => {
+      const mark = found.includes(agent) ? style('ok', '✓') : ' '
+      const number = style('accent', String(index + 1).padStart(3))
+      ctx.stderr.write(
+        `${number}  ${mark} ${agent.title.padEnd(width)}  ${style('dim', agent.project)}\n`,
+      )
+    })
+  } else {
+    ctx.stderr.write("Install Cosmion's skill for which agents? [x] = found on this computer\n")
+    AGENTS.forEach((agent, index) => {
+      const mark = found.includes(agent) ? 'x' : ' '
+      ctx.stderr.write(`  ${index + 1}. [${mark}] ${agent.title} (${agent.project})\n`)
+    })
+  }
   const answer = (
-    await prompt.ask('Numbers, separated by commas or spaces (Enter for the [x] ones): ')
+    await prompt.ask(
+      question(
+        ctx,
+        'Numbers, separated by commas or spaces (Enter for the [x] ones): ',
+        'Numbers',
+        'separated by commas or spaces, Enter for the ✓ ones',
+      ),
+    )
   ).trim()
   if (answer === '') {
     if (found.length === 0) throw new CosmionError('usage', 'No agents chosen.')
@@ -175,8 +206,17 @@ async function askAgents(ctx: Context, prompt: ReturnType<typeof createPrompt>):
   return AGENTS.filter((agent) => chosen.includes(agent))
 }
 
-async function askScope(prompt: ReturnType<typeof createPrompt>): Promise<Scope> {
-  const answer = (await prompt.ask('Global (all projects) or this project? [g/p]: '))
+async function askScope(ctx: Context, prompt: ReturnType<typeof createPrompt>): Promise<Scope> {
+  const answer = (
+    await prompt.ask(
+      question(
+        ctx,
+        'Global (all projects) or this project? [g/p]: ',
+        'Global (all projects) or this project?',
+        'g/p',
+      ),
+    )
+  )
     .trim()
     .toLowerCase()
   if (answer === 'g' || answer === 'global') return 'global'
@@ -213,6 +253,17 @@ const update = defineCommand({
     return skills
       .map(({ path, status }) =>
         status === 'updated' ? `Updated: ${path}` : `Up to date: ${path}`,
+      )
+      .join('\n')
+  },
+  pretty: ({ skills }) => {
+    if (skills.length === 0) {
+      return `${style('dim', 'No Cosmion skill found.')}\n  ${style('dim', '→')} ${code('`cosmion skill install` installs one for your agents.')}`
+    }
+    return skills
+      .map(
+        ({ path, status }) =>
+          `${style('ok', '✓')} ${status === 'updated' ? 'Updated' : 'Up to date'}  ${pathLink(path)}`,
       )
       .join('\n')
   },
@@ -264,6 +315,10 @@ const uninstall = defineCommand({
     removed.length === 0
       ? 'No Cosmion skill found.'
       : removed.map(({ path }) => `Removed: ${path}`).join('\n'),
+  pretty: ({ removed }) =>
+    removed.length === 0
+      ? style('dim', 'No Cosmion skill found.')
+      : removed.map(({ path }) => `${style('ok', '✓')} Removed  ${pathLink(path)}`).join('\n'),
 })
 
 export const skill = defineCommand({

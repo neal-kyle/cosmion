@@ -20,7 +20,5 @@ Thumbs.db
 .claude/settings.local.json
 
 # Local-only files
-DESIGN.md
 design/
 ARCHITECTURE.md
-.claude/skills/design/

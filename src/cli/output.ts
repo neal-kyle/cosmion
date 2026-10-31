@@ -1,8 +1,8 @@
-import { styleText } from 'node:util'
 import { z } from 'zod'
 import { ERROR_CODES } from '../core/errors.js'
 import type { PriceKind } from '../core/pricing.js'
 import type { Context, OutStream } from './context.js'
+import { code, cut, style } from './pretty.js'
 
 /** What `--json` prints on failure (FR-041). */
 export const errorOutputSchema = z.strictObject({
@@ -23,35 +23,62 @@ export function printText(ctx: Context, text: string): void {
 }
 
 export function warn(ctx: Context, message: string): void {
-  ctx.stderr.write(`${paint(ctx, 'yellow', 'warning:')} ${message}\n`)
+  if (fancy(ctx)) ctx.stderr.write(`${style('warn', '!')} ${code(message)}\n`)
+  else ctx.stderr.write(`warning: ${message}\n`)
 }
 
-/** Colors and animation only on a terminal, and never with NO_COLOR (FR-042). */
-function fancy(ctx: Context): boolean {
-  return ctx.stderr.isTTY && !ctx.env.NO_COLOR
+/**
+ * Whether a stream gets styling: colors, animation and tables fitted to the window. Only
+ * on a terminal, and never with NO_COLOR (FR-042). Everything else, pipes and agents
+ * included, gets the plain text.
+ */
+export function fancy(ctx: Context, stream: OutStream = ctx.stderr): boolean {
+  return stream.isTTY && !ctx.env.NO_COLOR && ctx.env.TERM !== 'dumb'
 }
 
-/** Colors text for stderr. */
-export function paint(ctx: Context, format: Parameters<typeof styleText>[0], text: string): string {
-  // We decide about color ourselves; newer Node versions would otherwise check stdout.
-  return fancy(ctx) ? styleText(format, text, { validateStream: false }) : text
-}
-
-/** A spinner on stderr while something slow runs; draws nothing off a terminal. */
-export function spinner(ctx: Context, label: string): { stop(): void } {
-  if (!fancy(ctx)) return { stop() {} }
+/**
+ * A line kept at the bottom of a stream and redrawn while something slow runs. Text written
+ * to the returned `stream` appears above it. Draws nothing off a terminal.
+ */
+export function liveLine(
+  ctx: Context,
+  render: (room: number) => string,
+  stream: OutStream = ctx.stderr,
+): { stream: OutStream; stop(): void } {
+  if (!fancy(ctx, stream)) return { stream, stop() {} }
   const frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  const clear = '\r\x1b[K'
+  // A line that wraps can't be redrawn in place, so it must stay inside the window.
+  const room = (stream.columns ?? 80) - 3
   let frame = 0
-  const draw = () => ctx.stderr.write(`\r${frames[frame++ % frames.length]} ${label}`)
-  draw()
-  const timer = setInterval(draw, 80)
+  const line = () => `${style('accent', frames[frame++ % frames.length] ?? '')} ${render(room)}`
+  stream.write(line())
+  const timer = setInterval(() => stream.write(clear + line()), 80)
   timer.unref()
   return {
+    stream: { ...stream, write: (text) => stream.write(clear + text + line()) },
     stop() {
       clearInterval(timer)
-      ctx.stderr.write('\r\x1b[K')
+      stream.write(clear)
     },
   }
+}
+
+/** What a prompt asks: `plain` off a terminal, otherwise `? text  hint › `. */
+export function question(ctx: Context, plain: string, text: string, hint?: string): string {
+  if (!fancy(ctx)) return plain
+  const after = hint ? `  ${style('dim', hint)}` : ''
+  return `${style('accent', '?')} ${style('bold', text)}${after} ${style('accent', '›')} `
+}
+
+/** A spinner on stderr with the time so far; draws nothing off a terminal. */
+export function spinner(ctx: Context, label: string): { stop(): void } {
+  const started = Date.now()
+  return liveLine(ctx, (room) => {
+    const seconds = Math.floor((Date.now() - started) / 1000)
+    const elapsed = seconds > 0 ? `  ${seconds}s` : ''
+    return cut(label, room - elapsed.length) + style('dim', elapsed)
+  })
 }
 
 /**
@@ -86,6 +113,7 @@ export function redactKey(stream: OutStream, env: Context['env']): OutStream {
   return {
     write: (text) => stream.write(text.replaceAll(key, '[redacted]')),
     isTTY: stream.isTTY,
+    columns: stream.columns,
   }
 }
 

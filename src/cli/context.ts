@@ -2,6 +2,8 @@
 export interface OutStream {
   write(text: string): void
   isTTY: boolean
+  /** The terminal's width; undefined when it isn't known. */
+  columns?: number
 }
 
 /**
@@ -16,6 +18,11 @@ export interface Context {
   stdin: NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?(mode: boolean): unknown }
   stdout: OutStream
   stderr: OutStream
+  /**
+   * Set by `run.ts`: the result will be printed with the command's `pretty`, so the command
+   * may show its progress on stdout as it goes.
+   */
+  prettyOut?: boolean
   fetch: typeof fetch
   /** `https://openrouter.ai/api/v1`, or COSMION_TEST_OPENROUTER_URL (FR-058). */
   baseUrl: string

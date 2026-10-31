@@ -8,7 +8,8 @@ import { defineCommand } from '../define.js'
 import { genOptions } from '../gen-options.js'
 import { findNewestMatch, readLedger, settingsSchema } from '../ledger.js'
 import { table } from '../output.js'
-import { priceSchema, priceText } from './price.js'
+import { fitTable, style } from '../pretty.js'
+import { PRICE_LEGEND, priceColumn, priceSchema, priceText } from './price.js'
 
 const outputSchema = z.strictObject({
   settings: settingsSchema,
@@ -84,4 +85,20 @@ export const modelsRank = defineCommand({
           ['ID', 'NAME', 'PRICE'],
           ...data.models.map((m) => [m.id, m.name, priceText(m.price)]),
         ]),
+  pretty: (data, columns) =>
+    data.models.length === 0
+      ? 'No model supports all of these options.'
+      : [
+          fitTable<(typeof data.models)[number]>(
+            [
+              { header: 'id', value: (model) => model.id, role: () => 'accent' },
+              { header: 'name', value: (model) => model.name, drop: 1, min: 30 },
+              priceColumn,
+            ],
+            data.models,
+            columns,
+          ),
+          '',
+          style('dim', PRICE_LEGEND),
+        ].join('\n'),
 })

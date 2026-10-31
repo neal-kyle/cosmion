@@ -383,9 +383,11 @@ describe('output', () => {
     expect(piped.stderr).not.toContain('\x1b[')
   })
 
-  test('help on stdout has no colors, even on a TTY', async () => {
-    const result = await cli(['--help'], { stdoutIsTTY: true })
-    expect(result.stdout).not.toContain('\x1b[')
+  test('help has colors only on a TTY', async () => {
+    const tty = await cli(['--help'], { stdoutIsTTY: true })
+    expect(tty.stdout).toContain('\x1b[')
+    const piped = await cli(['--help'])
+    expect(piped.stdout).not.toContain('\x1b[')
   })
 
   describe('the key from OPENROUTER_API_KEY is never printed', () => {

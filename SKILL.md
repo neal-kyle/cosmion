@@ -40,7 +40,7 @@ Environment variables:
 | `COSMION_MODEL` | The model when `--model` isn't passed (`gen`, `price`, `batch`) |
 | `COSMION_HOME` | Keep all of Cosmion's files (settings, history, catalog cache) under this folder instead of the usual per-OS folders |
 | `COSMION_DEBUG` | `1` adds the stack trace of an unexpected error (exit 1) to stderr |
-| `NO_COLOR` | Turns off colors on stderr |
+| `NO_COLOR` | Turns off colors, animation and tables fitted to the window on a terminal |
 
 ## Commands
 

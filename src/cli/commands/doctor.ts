@@ -10,8 +10,9 @@ import { defineCommand } from '../define.js'
 import { findKey, KEY_ENV, settingsFile } from '../key.js'
 import { readLedgerLines } from '../ledger.js'
 import { ENV_PREFIX, TITLE } from '../name.js'
-import { formatUsd } from '../output.js'
+import { fancy, formatTime, formatUsd, liveLine } from '../output.js'
 import { resolvePaths } from '../paths.js'
+import { code, cut, style, wrap } from '../pretty.js'
 import { allFolders, findCopies } from '../skills.js'
 import { readVersion } from '../version.js'
 
@@ -41,6 +42,8 @@ const fail = (name: string, message: string, fix: string): Check => ({
 const MIN_NODE = { major: 22, minor: 12 }
 /** Under this share of the key's limit left, warn. */
 const LOW_LIMIT_SHARE = 0.1
+/** The longest check name, `settings_file`. */
+const NAME_WIDTH = 13
 
 export const doctor = defineCommand({
   name: 'doctor',
@@ -48,18 +51,40 @@ export const doctor = defineCommand({
   output: z.strictObject({ checks: z.array(checkSchema) }),
   async run(_input, ctx) {
     const paths = resolvePaths(ctx.env)
-    const checks: Check[] = [
-      checkNode(ctx),
-      ...(await checkKey(ctx)),
-      await checkSettingsFile(ctx),
-      await checkOpenRouter(ctx),
-      await checkCatalog(ctx),
-      await checkFolder('config_folder', paths.config),
-      await checkFolder('data_folder', paths.data),
-      await checkFolder('cache_folder', paths.cache),
-      await checkLedger(ctx),
-      await checkSkill(ctx),
+    // On a terminal each check appears as it finishes; `pretty` then adds only the summary.
+    let current = ''
+    const progress = ctx.prettyOut
+      ? liveLine(ctx, (room) => cut(`Checking ${current}`, room), ctx.stdout)
+      : undefined
+    // Anything printed during a check goes above the progress line, without a second spinner.
+    const stepCtx: Context =
+      progress && fancy(ctx) ? { ...ctx, stderr: { ...progress.stream, isTTY: false } } : ctx
+    const steps: [string, () => Check | Check[] | Promise<Check | Check[]>][] = [
+      ['Node', () => checkNode(stepCtx)],
+      ['the key', () => checkKey(stepCtx)],
+      ['the settings file', () => checkSettingsFile(stepCtx)],
+      ['OpenRouter', () => checkOpenRouter(stepCtx)],
+      ['the model catalog', () => checkCatalog(stepCtx)],
+      ['the config folder', () => checkFolder('config_folder', paths.config)],
+      ['the data folder', () => checkFolder('data_folder', paths.data)],
+      ['the cache folder', () => checkFolder('cache_folder', paths.cache)],
+      ['the ledger', () => checkLedger(stepCtx)],
+      ['the skill', () => checkSkill(stepCtx)],
     ]
+    const checks: Check[] = []
+    try {
+      for (const [label, step] of steps) {
+        current = label
+        const done = [await step()].flat()
+        checks.push(...done)
+        const columns = ctx.stdout.columns ?? 80
+        for (const check of done) {
+          progress?.stream.write(`${checkLines(check, columns).join('\n')}\n`)
+        }
+      }
+    } finally {
+      progress?.stop()
+    }
     // Warnings are fine; a failure is exit 8, with the checks printed as usual (FR-096).
     const failed = checks.some((check) => check.status === 'fail')
     return failed ? { data: { checks }, exitCode: 8 } : { data: { checks } }
@@ -74,7 +99,33 @@ export const doctor = defineCommand({
       })
       .join('\n')
   },
+  pretty: ({ checks }) => {
+    const count = (status: Check['status']) => checks.filter((c) => c.status === status).length
+    const [warnings, failures] = [count('warn'), count('fail')]
+    const summary = [
+      style('ok', `${count('ok')} passed`),
+      ...(warnings
+        ? [style('warn', `${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`)]
+        : []),
+      ...(failures ? [style('error', `${failures} failed`)] : []),
+    ]
+    return `\n${summary.join('  ')}`
+  },
 })
+
+/** One check on a terminal: its mark, name and message, wrapped to stay in its column. */
+function checkLines(check: Check, columns: number): string[] {
+  const marks = { ok: style('ok', '✓'), warn: style('warn', '!'), fail: style('error', '✗') }
+  const start = 2 + NAME_WIDTH + 2
+  const indent = ' '.repeat(start)
+  const message = check.message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, formatTime)
+  const [first, ...rest] = wrap(code(message), columns - start)
+  const fix = check.fix ? wrap(`${style('accent', '→')} ${code(check.fix)}`, columns - start) : []
+  return [
+    `${marks[check.status]} ${style('dim', check.name.padEnd(NAME_WIDTH))}  ${first}`,
+    ...[...rest, ...fix].map((line) => indent + line),
+  ]
+}
 
 function checkNode(ctx: Context): Check {
   const [major = 0, minor = 0] = ctx.nodeVersion.replace(/^v/, '').split('.').map(Number)

@@ -52,6 +52,8 @@ export interface CommandDefinition {
   run?(input: Record<string, unknown>, ctx: Context): Promise<CommandResult<unknown>>
   /** stdout in text mode; without it, text mode prints the JSON. */
   text?(data: unknown): string
+  /** stdout on a terminal, styled and fitted to `columns`; without it, `text`. */
+  pretty?(data: unknown, columns: number): string
 }
 
 type Value<O extends OptionDefinition> = O['type'] extends 'boolean'
@@ -96,6 +98,7 @@ interface CommandSpec<
   output: z.ZodType<Output>
   run(input: Input<A, O>, ctx: Context): Promise<CommandResult<Output>>
   text?(data: Output): string
+  pretty?(data: Output, columns: number): string
 }
 
 interface GroupSpec {

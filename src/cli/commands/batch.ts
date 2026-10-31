@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import { z } from 'zod'
 import { type RowResult, type RowStatus, schedule } from '../../core/batch.js'
 import { CosmionError, ERROR_CODES } from '../../core/errors.js'
@@ -12,9 +13,11 @@ import { defineCommand } from '../define.js'
 import { modelOption } from '../gen-options.js'
 import { ChargedError, execute, type PreparedGeneration, prepare } from '../generate.js'
 import { findNewestMatch, type LedgerEntry, readLedger } from '../ledger.js'
-import { formatUsd, warn } from '../output.js'
-import { priceSchema, priceText } from './price.js'
+import { fancy, formatUsd, liveLine, warn } from '../output.js'
+import { bar, code, fitTable, pathLink, type Role, style } from '../pretty.js'
+import { priceColumn, priceSchema, priceText } from './price.js'
 
+const METER_CELLS = 24
 const STATUSES = ['ok', 'failed', 'skipped_budget', 'skipped_resumed', 'not_run'] as const
 
 const reportSchema = z.strictObject({
@@ -152,7 +155,9 @@ export const batch = defineCommand({
     const { spent, groupCosts } = await earlierSpending(ctx, earlier, ledger, budget, resumeAdvice)
 
     ctx.stderr.write(
-      `Batch ${batchId}: ${prepared.size} of ${rows.length} rows to run. If it stops, continue with --resume ${batchId}.\n`,
+      fancy(ctx)
+        ? `${style('bold', `Batch ${batchId}`)}  ${style('dim', `${prepared.size} of ${rows.length} rows · continue with --resume ${batchId}`)}\n`
+        : `Batch ${batchId}: ${prepared.size} of ${rows.length} rows to run. If it stops, continue with --resume ${batchId}.\n`,
     )
     if (budget === null) {
       warn(ctx, "No budget: this batch's only cap is your key's spending limit on OpenRouter.")
@@ -172,14 +177,32 @@ export const batch = defineCommand({
     })
 
     const ran = new Map<number, Ran>()
-    const result = await schedule({
-      rows: scheduled,
-      budget,
-      spent,
-      concurrency,
-      unknownCostMessage: `A row came back without its cost and had no known price, so the budget can't be tracked; no further rows were started. To continue without a cap: ${resumeAdvice}`,
-      runRow: (row) => runRow(ctx, prepared.get(row) as PreparedGeneration, ran),
+    // Only for the progress line: `schedule` keeps the count that decides anything.
+    let finished = 0
+    let spentNow = toNano(spent)
+    const progress = liveLine(ctx, () => {
+      const count = `${finished} of ${prepared.size} rows`
+      return `${count}  ${spendingText(toUsd(spentNow), budget)}`
     })
+    const rowCtx = { ...ctx, stderr: progress.stream }
+    let result: Awaited<ReturnType<typeof schedule>>
+    try {
+      result = await schedule({
+        rows: scheduled,
+        budget,
+        spent,
+        concurrency,
+        unknownCostMessage: `A row came back without its cost and had no known price, so the budget can't be tracked; no further rows were started. To continue without a cap: ${resumeAdvice}`,
+        runRow: async (row) => {
+          const rowResult = await runRow(rowCtx, prepared.get(row) as PreparedGeneration, ran)
+          finished++
+          if (rowResult.costUsd !== null) spentNow += toNano(rowResult.costUsd)
+          return rowResult
+        },
+      })
+    } finally {
+      progress.stop()
+    }
 
     const outcomes = new Map(result.rows.map((outcome) => [outcome.row, outcome]))
     const reportRows = rows.map((row): ReportRow => {
@@ -236,6 +259,13 @@ export const batch = defineCommand({
   },
   text: (data) =>
     'total' in data ? dryRunText(data) : data.rows.flatMap((row) => row.paths).join('\n'),
+  pretty: (data, columns) =>
+    'total' in data
+      ? dryRunPretty(data, columns)
+      : data.rows
+          .flatMap((row) => row.paths)
+          .map((path) => pathLink(path))
+          .join('\n'),
 })
 
 /** The budget in USD, or null for --no-budget; exactly one must be given (FR-071). */
@@ -390,11 +420,19 @@ async function runRow(
     const paths = entry.images.map((image) => image.path)
     ran.set(row, { id: entry.id, paths, cost: entry.cost_usd })
     const cost = entry.cost_usd === null ? 'unknown cost' : formatUsd(entry.cost_usd)
-    ctx.stderr.write(`Row ${row}: ${paths.join(', ')} (${cost})\n`)
+    ctx.stderr.write(
+      fancy(ctx)
+        ? `${rowMark('ok', '✓', row)}  ${paths.map((path) => pathLink(path, basename(path))).join(', ')}  ${cost}\n`
+        : `Row ${row}: ${paths.join(', ')} (${cost})\n`,
+    )
     return { charged: true, costUsd: entry.cost_usd, error: null }
   } catch (error) {
     if (ctx.signal.aborted || !(error instanceof CosmionError)) throw error
-    ctx.stderr.write(`Row ${row} failed: ${error.message}\n`)
+    ctx.stderr.write(
+      fancy(ctx)
+        ? `${rowMark('error', '✗', row)}  ${code(error.message)}\n`
+        : `Row ${row} failed: ${error.message}\n`,
+    )
     const failure = { code: error.code, message: error.message }
     if (error instanceof ChargedError) {
       const { entry } = error
@@ -409,6 +447,17 @@ async function runRow(
     const charged = error.code === 'upstream' && !error.retryable
     return { charged, costUsd: null, error: failure }
   }
+}
+
+function rowMark(role: Role, mark: string, row: number): string {
+  return `${style(role, mark)} ${style('dim', String(row).padStart(2))}`
+}
+
+/** `━━─────  $0.08 of $1.00`, or just what was spent with --no-budget. */
+function spendingText(spent: number, budget: number | null): string {
+  return budget === null
+    ? `${style('bold', formatUsd(spent))} ${style('dim', 'spent')}`
+    : `${bar(spent, budget, METER_CELLS)}  ${style('bold', formatUsd(spent))} ${style('dim', `of ${formatUsd(budget)}`)}`
 }
 
 function dryRun(prices: ReadonlyMap<number, PriceResult>): DryRun {
@@ -442,11 +491,34 @@ function dryRunText(data: DryRun): string {
   ].join('\n')
 }
 
+function dryRunPretty(data: DryRun, columns: number): string {
+  const rows = [...data.rows, { row: 'Total', price: data.total }]
+  return [
+    fitTable<(typeof rows)[number]>(
+      [{ header: 'row', value: ({ row }) => String(row), right: true }, priceColumn],
+      rows,
+      columns,
+      { total: true },
+    ),
+    ...data.total.notes.map((note) => style('dim', note)),
+  ].join('\n')
+}
+
 /** One line on stderr: what was spent and what happened to the rows, and why it stopped. */
 function summarize(ctx: Context, report: Report): void {
   if (report.stopped) warn(ctx, `Stopped: ${report.stopped.message}`)
   const counts = new Map<string, number>()
   for (const row of report.rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
+  if (fancy(ctx)) {
+    const roles: Partial<Record<string, Role>> = { ok: 'ok', failed: 'error' }
+    const parts = [...counts].map(([status, count]) =>
+      style(roles[status] ?? 'dim', `${count} ${status.replaceAll('_', ' ')}`),
+    )
+    ctx.stderr.write(
+      `\n${spendingText(report.spent_usd, report.budget_usd)}  ${parts.join('  ')}\n`,
+    )
+    return
+  }
   const parts = [...counts].map(([status, count]) => `${count} ${status}`)
   const budget = report.budget_usd === null ? '' : ` of ${formatUsd(report.budget_usd)}`
   ctx.stderr.write(`Spent ${formatUsd(report.spent_usd)}${budget}: ${parts.join(', ')}.\n`)

@@ -6,8 +6,9 @@ import { loadCatalog, loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
 import { findNewestMatch, readLedger } from '../ledger.js'
 import { table } from '../output.js'
+import { fields, fitTable, style, wrap } from '../pretty.js'
 import { modelsRank } from './models-rank.js'
-import { priceSchema, priceText } from './price.js'
+import { PRICE_LEGEND, priceColumn, priceSchema, priceText } from './price.js'
 
 const listedModelSchema = z.strictObject({
   id: z.string(),
@@ -90,6 +91,8 @@ export const models = defineCommand({
     return { data }
   },
   text: (data) => ('models' in data ? listText(data) : detailText(data)),
+  pretty: (data, columns) =>
+    'models' in data ? listPretty(data, columns) : detailPretty(data, columns),
 })
 
 function listText(list: List): string {
@@ -129,6 +132,66 @@ function detailText(detail: Detail): string {
     table(options),
     '',
     'Providers',
+    ...providers,
+  ].join('\n')
+}
+
+function listPretty(list: List, columns: number): string {
+  return [
+    fitTable<List['models'][number]>(
+      [
+        { header: 'id', value: (model) => model.id, role: () => 'accent' },
+        { header: 'name', value: (model) => model.name, drop: 2, min: 30 },
+        priceColumn,
+        {
+          header: 'refs',
+          value: (model) => (model.accepts_references ? String(model.max_references) : '-'),
+          right: true,
+        },
+        {
+          header: 'options',
+          value: (model) => model.parameters.join(', '),
+          role: () => 'dim',
+          drop: 3,
+        },
+      ],
+      list.models,
+      columns,
+    ),
+    '',
+    ...wrap(`${PRICE_LEGEND} · cosmion models <id> for options and providers`, columns).map(
+      (line) => style('dim', line),
+    ),
+  ].join('\n')
+}
+
+function detailPretty(detail: Detail, columns: number): string {
+  const options = Object.entries(detail.parameters).map(([name, option]): [string, string] => [
+    name,
+    describeOption(option),
+  ])
+  const providers = detail.endpoints.flatMap((endpoint) => {
+    const tag = endpoint.provider_tag ? ` (${endpoint.provider_tag})` : ''
+    const lines = endpoint.pricing.map((line): [string, string] => [
+      line.billable,
+      `$${plainNumber(line.cost_usd)} per ${line.unit}${line.variant ? `, ${line.variant}` : ''}`,
+    ])
+    return [
+      `  ${endpoint.provider_name}${tag}`,
+      ...(lines.length
+        ? fields(lines, columns - 4).map((line) => `    ${line}`)
+        : [style('dim', '    no pricing listed')]),
+    ]
+  })
+  return [
+    `${style('strong', detail.id)}  ${style('dim', detail.name)}`,
+    '',
+    ...wrap(detail.description, Math.min(columns, 90)),
+    '',
+    style('bold', 'Options'),
+    ...fields(options, columns - 2).map((line) => `  ${line}`),
+    '',
+    style('bold', 'Providers'),
     ...providers,
   ].join('\n')
 }

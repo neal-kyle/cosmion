@@ -19,7 +19,8 @@ import { findKey, KEY_ENV } from './key.js'
 import { appendEntry, type LedgerEntry, ledgerFile, readLedger } from './ledger.js'
 import { TITLE } from './name.js'
 import { extensionOf, formatOfPath, type OutPaths, planOutPaths } from './out-paths.js'
-import { formatUsd, spinner, warn } from './output.js'
+import { fancy, formatUsd, spinner, warn } from './output.js'
+import { pathLink, style } from './pretty.js'
 import { type Ref, readRefs } from './refs.js'
 
 /** A generation as asked for: gen's arguments and options. */
@@ -147,7 +148,8 @@ export async function execute(ctx: Context, prepared: PreparedGeneration): Promi
     title: TITLE,
     signal: ctx.signal,
   })
-  const progress = spinner(ctx, `Generating with ${model.id}`)
+  // A batch shows one progress line for all its rows instead.
+  const progress = prepared.batch ? { stop() {} } : spinner(ctx, `Generating with ${model.id}`)
   let result: GeneratedImages
   try {
     result = await client.generateImages(prepared.key, {
@@ -234,6 +236,37 @@ export async function execute(ctx: Context, prepared: PreparedGeneration): Promi
     )
   }
   return entry
+}
+
+/** gen and regen's one summary line on stderr: id, model and cost (FR-015). */
+export function announce(
+  ctx: Context,
+  entry: LedgerEntry,
+  startedAt: number,
+  againFrom?: string,
+): void {
+  if (!fancy(ctx)) {
+    const cost = entry.cost_usd === null ? 'an unknown cost' : formatUsd(entry.cost_usd)
+    const again = againFrom ? ` (again from ${againFrom})` : ''
+    ctx.stderr.write(`Generated ${entry.id}${again} with ${entry.model} for ${cost}.\n`)
+    return
+  }
+  const [image] = entry.images
+  const details = [
+    ...(againFrom ? [`again from ${againFrom}`] : []),
+    entry.model,
+    ...(image?.width ? [`${image.width}×${image.height}`] : []),
+    `${Math.round((Date.now() - startedAt) / 1000)}s`,
+  ]
+  const cost = entry.cost_usd === null ? 'unknown cost' : formatUsd(entry.cost_usd)
+  ctx.stderr.write(
+    `${style('ok', '✓')} Generated ${style('bold', entry.id)}  ${style('dim', `${details.join(' · ')} ·`)} ${style('bold', cost)}\n`,
+  )
+}
+
+/** A generation's saved paths on a terminal, as links. */
+export function savedPaths(entry: LedgerEntry): string {
+  return entry.images.map((image) => pathLink(image.path)).join('\n')
 }
 
 /** `image/svg+xml` → `svg`, `image/jpeg` → `jpeg`: the format as the Images API names it. */

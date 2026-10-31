@@ -1,7 +1,12 @@
 #!/usr/bin/env node
+import { enableCompileCache } from 'node:module'
 import { homedir } from 'node:os'
 import type { Context } from './context.js'
-import { run } from './run.js'
+
+// Starts faster from the second run. It must come before the code it speeds up loads,
+// hence the import of run.js further down.
+enableCompileCache()
+const { run } = await import('./run.js')
 
 // Ctrl-C aborts the running command, which then exits 130. A second Ctrl-C kills the
 // process the usual way, since `once` removes this handler.
@@ -20,10 +25,12 @@ const ctx: Context = {
   stdout: {
     write: (text) => void process.stdout.write(text),
     isTTY: process.stdout.isTTY === true,
+    columns: process.stdout.columns,
   },
   stderr: {
     write: (text) => void process.stderr.write(text),
     isTTY: process.stderr.isTTY === true,
+    columns: process.stderr.columns,
   },
   fetch: globalThis.fetch,
   // Test-only (FR-058): lets the packaging and concurrency tests use a fake.
