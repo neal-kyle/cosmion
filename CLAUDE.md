@@ -17,8 +17,8 @@ doesn't repeat it.
 
 Where things are:
 
-- `specs/`: what's built and why. `specs/001-cli` covers the whole CLI (v0.1); new work
-  starts a new spec.
+- `specs/`: records of how each feature was built, not kept up to date after merging.
+  `specs/001-cli` covers the whole CLI (v0.1).
 - `docs/openrouter-api.md`: the OpenRouter endpoints, fields and pricing rules Cosmion
   uses, including what was checked against the live API. Check it before speccing
   anything that talks to OpenRouter.
@@ -42,7 +42,7 @@ system passes.
 `serveFakeOpenRouter()` in `tests/helpers/fake-openrouter.ts` serves one. It's test-only:
 keep it out of the README and `SKILL.md`.
 
-Features go through **Spec Kit** (lean preset):
+New capabilities go through **Spec Kit** (lean preset):
 
 | Command | Use for |
 |---------|---------|

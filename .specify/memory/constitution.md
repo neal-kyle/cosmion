@@ -86,21 +86,18 @@ about possible future work is worded as an idea, never a plan.
 
 ## Development Workflow
 
-- Every new feature or behavior change is specced before it's built. A new capability
-  goes through Spec Kit: specify → clarify (when anything is ambiguous) → plan → tasks →
-  analyze → implement. A small change to existing behavior instead edits the spec where
-  that behavior is described, then its plan and tasks where they're affected; clarify
-  and analyze can be skipped when there's nothing to resolve. The maintainer approves
-  the spec, the plan and the tasks; no tests or code before that.
+- A new capability goes through Spec Kit, in its own `specs/NNN-name`. The maintainer
+  approves the spec, the plan and the tasks; no tests or code before that.
+- A spec's folder (`spec.md`, `plan.md`, `tasks.md`) is a record of how a feature was
+  built, not a living document. While its branch is open, correct whichever of them a
+  change makes wrong. Once merged to `main`, they aren't edited again.
+- Everything else goes straight to a pull request, with tests, and with `README.md` and
+  `SKILL.md` updated when behavior changes. No spec needed.
 - Specs describe behavior, not implementation, and stay short. CLI features include the
   exact commands, flags, JSON output and exit codes.
 - Tasks are grouped into phases that each leave the project working and tested.
   Implement one phase at a time, then report and wait.
-- If building reveals the spec was wrong, update the spec and tell the maintainer; the spec
-  always matches what shipped.
-- No spec needed for bug fixes that restore specced behavior, refactors that don't
-  change behavior, dependency updates, or docs. A bug fix still starts with a failing
-  test.
+- A bug fix starts with a failing test.
 
 ### Git
 
@@ -121,4 +118,4 @@ This constitution guides every Spec Kit command. Plans that add complexity beyon
 principles must justify it in the plan. Amendments are made with the maintainer's
 approval and recorded by bumping the version below.
 
-**Version**: 1.4.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-18
+**Version**: 1.5.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-31
