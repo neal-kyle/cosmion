@@ -319,6 +319,16 @@ command updates it after an upgrade.
 
 ---
 
+## Phase 13: The rate on an unknown price (US4)
+
+**Goal**: `price` shows the listed rate when it can't give a price yet.
+
+- [x] T111 [US4] Extend `tests/core/pricing.test.ts` and `tests/cli/price.test.ts` for FR-034a
+- [x] T112 [US4] Add the rate note in `src/core/pricing.ts` and the headline in `src/cli/commands/price.ts`
+- [x] T113 [US4] Docs: `SKILL.md` and `docs/openrouter-api.md`
+
+---
+
 ## Dependencies
 
 - Phases run in order; each needs the ones before it.

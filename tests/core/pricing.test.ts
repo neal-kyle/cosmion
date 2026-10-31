@@ -298,6 +298,78 @@ describe('count (FR-035)', () => {
   })
 })
 
+describe('the rate, when the price is unknown (FR-034a)', () => {
+  const rate = (result: { notes: string[] }) =>
+    result.notes.find((note) => note.startsWith('Rate')) ?? null
+  const line = (billable: string, unit: string, cost_usd: number) => ({
+    billable,
+    unit,
+    cost_usd,
+  })
+
+  test('per token: every charge per 1M tokens, the output first', () => {
+    const model = custom([
+      line('input_image', 'token', 0.000008),
+      line('input_text', 'token', 0.000005),
+      line('output_image', 'token', 0.00003),
+    ])
+    expect(rate(priceOf(model))).toBe('Rate per 1M tokens: $30 out, $8 image in, $5 text in')
+  })
+
+  test('the charges are in the same order whatever the catalog lists', () => {
+    const model = custom([
+      line('input_text', 'token', 0.000005),
+      line('output_image', 'token', 0.00003),
+      line('input_image', 'token', 0.000008),
+    ])
+    expect(rate(priceOf(model))).toBe('Rate per 1M tokens: $30 out, $8 image in, $5 text in')
+  })
+
+  test('per megapixel: spelled out', () => {
+    const model = custom([line('output_image', 'megapixel', 0.014)])
+    expect(rate(priceOf(model))).toBe('Rate: $0.014/megapixel out')
+  })
+
+  test('mixed units: each charge carries its own', () => {
+    const model = custom([
+      line('input_image', 'image', 0.02),
+      line('output_image', 'token', 0.00003),
+    ])
+    expect(rate(priceOf(model))).toBe('Rate: $30/1M tokens out, $0.02/image in')
+  })
+
+  test('free lines are left out', () => {
+    const model = custom([line('input_text', 'token', 0), line('output_image', 'megapixel', 0.014)])
+    expect(rate(priceOf(model))).toBe('Rate: $0.014/megapixel out')
+  })
+
+  test('several providers: the highest of each charge', () => {
+    const model = custom(
+      [line('input_text', 'token', 0.000005), line('output_image', 'token', 0.00003)],
+      [line('input_text', 'token', 0.000004), line('output_image', 'token', 0.000033)],
+    )
+    expect(rate(priceOf(model))).toBe('Rate per 1M tokens: $33 out, $5 text in')
+  })
+
+  test('an unknown unit is listed as it is', () => {
+    const model = custom([line('output_image', 'second', 0.5)])
+    expect(rate(priceOf(model))).toBe('Rate: $0.5/second out')
+  })
+
+  test('no output line, no rate', () => {
+    const model = custom([line('input_text', 'token', 0.000005)])
+    expect(priceOf(model).kind).toBe('unknown')
+    expect(rate(priceOf(model))).toBeNull()
+  })
+
+  test('a known price has no rate', () => {
+    expect(rate(priceOf('bytedance-seed/seedream-4.5'))).toBeNull()
+    expect(
+      rate(priceOf('google/gemini-2.5-flash-image', {}, { lastMatch: tokens(17, 1290, 0.03872) })),
+    ).toBeNull()
+  })
+})
+
 describe('what Cosmion cannot compute (FR-036, FR-034)', () => {
   test('an unknown billable is noted and makes the kind no better than estimate', () => {
     const result = priceOf('cosmion-test/unknown-billable')

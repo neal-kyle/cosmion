@@ -230,10 +230,34 @@ describe('text output (FR-037)', () => {
     expect(result.stdout.split('\n')[0]).toBe('~$0.0387')
   })
 
-  test('unknown: says so, with the reason', async () => {
+  test('unknown until the first image: says so, with the rate (FR-034a)', async () => {
     const { price } = setup()
     const result = await price(['-m', 'google/gemini-2.5-flash-image'])
-    expect(result.stdout).toMatch(/^Unknown/)
-    expect(result.stdout).toMatch(/after the first image/i)
+    const lines = result.stdout.trim().split('\n')
+    expect(lines[0]).toBe('Unknown until the first image with these settings')
+    expect(lines[1]).toMatch(/^ {2}Rate per 1M tokens: \$\d.* out/)
+    expect(lines).toHaveLength(2)
+  })
+
+  test('per megapixel: the rate is spelled out (FR-034a)', async () => {
+    const { price } = setup()
+    const result = await price(['-m', 'black-forest-labs/flux.2-klein-4b'])
+    expect(result.stdout).toMatch(/Rate: \$[\d.]+\/megapixel out/)
+  })
+
+  test('no pricing listed: unknown, with no rate', async () => {
+    const { price } = setup()
+    const result = await price(['-m', 'krea/krea-2-medium'])
+    expect(result.stdout.split('\n')[0]).toBe('Unknown')
+    expect(result.stdout).not.toContain('Rate')
+  })
+
+  test('--json has the rate in notes, and no new field (FR-034a)', async () => {
+    const { price } = setup()
+    const result = await price(['-m', 'google/gemini-2.5-flash-image', '--json'])
+    const output = result.json as PriceOutput
+    expect(Object.keys(output).sort()).toEqual(['cost_usd', 'kind', 'model', 'notes', 'settings'])
+    expect(output).toMatchObject({ kind: 'unknown', cost_usd: null })
+    expect(output.notes.some((note) => note.startsWith('Rate per 1M tokens: '))).toBe(true)
   })
 })

@@ -175,8 +175,8 @@ generating works without them.
    `price`, **Then** it shows an estimate from my last matching generation's token counts
    × the current per-token price, `kind: "estimate"`.
 5. **Given** a per-token or per-megapixel model I haven't used with these settings,
-   **When** I run `price`, **Then** it says the price will be known after the first image,
-   `kind: "unknown"`.
+   **When** I run `price`, **Then** it says the price will be known after the first image
+   and shows the listed rate, `kind: "unknown"`.
 6. **Given** a model with a line without a variant ($0.045) and a `high_resolution` line
    ($0.09), **When** I run `price --resolution 1K`, **Then** it shows $0.045 exactly; with
    `--resolution 2K`, $0.09 exactly.
@@ -549,6 +549,12 @@ version; check which files exist, their contents and the JSON output.
     giving both;
   - `unknown`: no matching history for those models, no pricing listed, or a `unit` Cosmion
     doesn't recognize. Never guessed.
+- **FR-034a**: An `unknown` price of a model with an output line MUST add its rate to
+  `notes`: every charge above $0, the output first, the highest across providers, as
+  listed. All per token: `Rate per 1M tokens: $30 out, $8 image in, $5 text in`.
+  Otherwise each charge has its unit: `Rate: $0.014/megapixel out`. No new JSON field; it
+  doesn't change the kind or `cost_usd`. `price`'s text output heads it
+  `Unknown until the first image with these settings` when a generation would give a price.
 - **FR-035**: Per-image prices from the catalog MUST be multiplied by `--count` (default 1).
   Estimates (FR-034) aren't.
 - **FR-036**: Any part of the cost the CLI can't compute (e.g. a pricing line whose

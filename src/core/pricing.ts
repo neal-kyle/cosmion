@@ -37,7 +37,7 @@ const RESOLUTIONS = ['512', '768', '1K', '2K', '4K']
 /** Above this, a per-image price is corrected by what was actually charged (FR-034). */
 const TOLERANCE_NANO = toNano(0.001)
 
-const AFTER_FIRST = 'the price is shown after the first image with these settings.'
+export const AFTER_FIRST_IMAGE = 'The price is shown after the first image with these settings.'
 
 /** One endpoint's price; `nano` is null when unknown. */
 interface Part {
@@ -66,7 +66,10 @@ export function price(
   const notes = [...new Set(parts.flatMap((part) => part.notes))]
 
   const costs = parts.map((part) => part.nano)
-  if (costs.some((cost) => cost === null)) return { kind: 'unknown', cost_usd: null, notes }
+  if (costs.some((cost) => cost === null)) {
+    const rate = rateNote(model)
+    return { kind: 'unknown', cost_usd: null, notes: rate ? [...notes, rate] : notes }
+  }
   const highest = Math.max(...(costs as number[]))
   let kind = weakestKind(...parts.map((part) => part.kind))
   if (costs.some((cost) => cost !== highest)) {
@@ -87,6 +90,53 @@ export function price(
     return { kind: 'estimate', cost_usd: actual, notes }
   }
   return { kind, cost_usd: toUsd(highest), notes }
+}
+
+/**
+ * Every charge the model lists, the output first and the highest across providers
+ * (FR-034a). Undefined when there's no output line to give a rate for.
+ */
+function rateNote(model: CatalogModel): string | undefined {
+  const lines = model.endpoints.flatMap((endpoint) => endpoint.pricing)
+  if (!lines.some((line) => line.billable === 'output_image')) return undefined
+
+  const highest = new Map<string, PricingLine>()
+  for (const line of lines) {
+    if (line.cost_usd === 0) continue
+    const key = `${line.billable} ${line.unit}`
+    const seen = highest.get(key)
+    if (!seen || line.cost_usd > seen.cost_usd) highest.set(key, line)
+  }
+  const charges = [...highest.values()].sort(
+    (a, b) =>
+      Number(b.billable === 'output_image') - Number(a.billable === 'output_image') ||
+      a.billable.localeCompare(b.billable),
+  )
+  if (charges.length === 0) return undefined
+
+  if (charges.every((line) => line.unit === 'token')) {
+    const parts = charges.map((line) => `$${perMillion(line)} ${chargeLabel(line)}`)
+    return `Rate per 1M tokens: ${parts.join(', ')}`
+  }
+  const parts = charges.map((line) =>
+    line.unit === 'token'
+      ? `$${perMillion(line)}/1M tokens ${chargeLabel(line)}`
+      : `$${line.cost_usd}/${line.unit} ${chargeLabel(line)}`,
+  )
+  return `Rate: ${parts.join(', ')}`
+}
+
+function perMillion(line: PricingLine): number {
+  return toUsd(toNano(line.cost_usd) * 1e6)
+}
+
+/** `out`, `image in`, `text in`; the noun goes when the unit already says it (`$0.02/image in`). */
+function chargeLabel({ billable, unit }: PricingLine): string {
+  if (billable === 'output_image') return 'out'
+  const match = /^(input|output)_(.+)$/.exec(billable)
+  if (!match) return billable
+  const direction = match[1] === 'input' ? 'in' : 'out'
+  return match[2] === unit ? direction : `${match[2]} ${direction}`
 }
 
 function priceEndpoint(
@@ -119,7 +169,7 @@ function priceEndpoint(
   } else if (line.unit === 'token') {
     // Tokens per image are near-fixed for the same settings, so the last count × today's
     // price. The estimate covers the whole request, like that entry (count included).
-    if (!lastMatch?.usage) return unknown(`Priced per token; ${AFTER_FIRST}`)
+    if (!lastMatch?.usage) return unknown(AFTER_FIRST_IMAGE)
     const inputPrices = endpoint.pricing
       .filter((other) => other.billable !== 'output_image' && other.unit === 'token')
       .map((other) => toNano(other.cost_usd))
@@ -129,7 +179,7 @@ function priceEndpoint(
     kind = weakestKind(kind, 'estimate')
   } else if (line.unit === 'megapixel') {
     // Not linear in megapixels, so the last actual cost, which covers everything.
-    if (lastMatch?.cost_usd == null) return unknown(`Priced per megapixel; ${AFTER_FIRST}`)
+    if (lastMatch?.cost_usd == null) return unknown(AFTER_FIRST_IMAGE)
     return { kind: 'estimate', nano: toNano(lastMatch.cost_usd), notes, perImage: false }
   } else {
     return unknown(`Priced per "${line.unit}", which Cosmion doesn't know; it's never guessed.`)

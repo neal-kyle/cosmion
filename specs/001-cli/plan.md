@@ -230,7 +230,8 @@ reference lines (FR-033), applies the unit rules (`image` exact, `token` and `me
 from `lastMatch`, unknown unit → unknown), multiplies per-image catalog lines by `n`
 (never an estimate: `lastMatch` had the same `n` and its cost already covers the whole
 request), then combines endpoints: equal → that kind, different → `at_most` with the
-highest. `models` prices each model this way with no options. Every
+highest. An unknown result adds the rate note (FR-034a). `models` prices each model this
+way with no options. Every
 case in Story 4 and every pricing case in `docs/openrouter-api.md` → Charged vs listed
 gets a fixture model and a test.
 

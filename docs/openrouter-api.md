@@ -181,6 +181,8 @@ the actual cost, which corrects both (below).
     they barely move the shown price.
   - If a provider changes how many tokens an image uses, the shown price is off once,
     then corrects itself from the new generation.
+- **Unknown prices** also show the listed rate (every charge, the highest across
+  providers), so nobody has to check the website. It's not a price per image.
 - **No per-model code.** Pricing is computed from each line's `unit`, never from the
   model's name, so new models priced in a known unit work automatically.
   - **Unknown `unit`** (one OpenRouter adds later): show "Price not listed" until Cosmion

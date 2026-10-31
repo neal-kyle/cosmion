@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { toSettings } from '../../core/options.js'
-import { PRICE_KINDS, type PriceResult, price as priceOf } from '../../core/pricing.js'
+import {
+  AFTER_FIRST_IMAGE,
+  PRICE_KINDS,
+  type PriceResult,
+  price as priceOf,
+} from '../../core/pricing.js'
 import { loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
 import { genOptions, modelOption, resolveModelId } from '../gen-options.js'
@@ -34,7 +39,13 @@ export const price = defineCommand({
     const result = priceOf(model, { settings, refCount }, lastMatch ?? null)
     return { data: { model: model.id, settings, ...result } }
   },
-  text: (data) => [priceText(data), ...data.notes.map((note) => `  ${note}`)].join('\n'),
+  text: (data) => {
+    const headline = data.notes.includes(AFTER_FIRST_IMAGE)
+      ? 'Unknown until the first image with these settings'
+      : priceText(data)
+    const notes = data.notes.filter((note) => note !== AFTER_FIRST_IMAGE)
+    return [headline, ...notes.map((note) => `  ${note}`)].join('\n')
+  },
 })
 
 /** `$0.04`, `≤$0.09`, `~$0.0387` or `Unknown`. */

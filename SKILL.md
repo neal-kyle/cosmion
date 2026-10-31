@@ -131,7 +131,10 @@ Options: `-m, --model <id>`, the gen options above, `--json`.
 - `unknown`: `cost_usd` is `null`; nothing is guessed. Generate once and `price` can then
   estimate it.
 
-`notes` explains anything not counted.
+`notes` explains anything not counted. With an `unknown` price it also gives the model's
+listed rate when there is one, such as `Rate per 1M tokens: $30 out, $8 image in, $5 text in`.
+That isn't the cost of an image: don't budget from it. Tell the user the rate, and that the
+cost is known after the first image.
 
 ### `cosmion models [id]`
 
