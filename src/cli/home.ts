@@ -2,6 +2,8 @@ import { type CommandDefinition, jsonOption } from './define.js'
 import { cut, style } from './pretty.js'
 
 const WORDMARK = ['▄▀▀ ▄▀▄ ▄▀▀ █▄ ▄█ █ ▄▀▄ █▄ █', '▀▄▄ ▀▄▀ ▄██ █ ▀ █ █ ▀▄▀ █ ▀█']
+/** Two dim stars glinting off the N's top corner. */
+const SPARKLE = `${' '.repeat(27)}· +`
 
 const GROUPS = [
   ['Make', ['gen', 'batch', 'regen']],
@@ -36,6 +38,7 @@ export function homeScreen(
   ])
   const [top = '', bottom = ''] = WORDMARK
   return [
+    style('dim', SPARKLE),
     style('accent', top),
     `${style('accent', bottom)}  ${style('dim', version)}`,
     '',

@@ -18,8 +18,8 @@ exactly as they are, so nothing a script or agent reads depends on this document
   headers and one thin line under them; prices and counts are right-aligned.
 - **Tables fit the window.** Long text shortens with `…`, then the least useful columns go.
   The id always stays in full: it's what you copy.
-- **Wordmark:** the small two-line one, on the `cosmion` and `cosmion --help` screen only, never
-  on a command's output. That screen groups the commands: Make, Choose, Look back, Set up.
+- **Wordmark:** the small two-line one with two dim stars off its top-right corner, on the
+  `cosmion` and `cosmion --help` screen only, never on a command's output. That screen groups the commands: Make, Choose, Look back, Set up.
 - **Symbols:** `✓` done, `✗` failed, `!` needs a look, `→` what to do next, `?` and `›` a
   question waiting for an answer.
 - **Paths:** underlined and clickable in terminals that support links.
