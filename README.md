@@ -7,6 +7,8 @@ you spend, and Cosmion records what every image cost.
 [OpenRouter](https://openrouter.ai) is a service that gives you one API key for AI models
 from many providers.
 
+![Cosmion's home screen in a terminal, listing its commands](docs/images/home-screen.png)
+
 ```sh
 npm install -g cosmion
 ```
