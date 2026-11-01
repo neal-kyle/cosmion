@@ -505,6 +505,31 @@ describe('stopping (FR-073a, FR-075, FR-078)', () => {
     expect(t.fake.imageRequests()).toHaveLength(2)
   })
 
+  test('an in-flight refusal fails only its row', async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: { status: 402, errorMetadata: { limit_source: 'openrouter_in_flight_budget' } },
+    }
+    const result = await t.batch([t.csv(3), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(8)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'ok'])
+    expect(report.stopped).toBeNull()
+    expect(report.rows[1]?.error?.code).toBe('rate_limited')
+  })
+
+  test('a refused 403 fails only its row', async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: { status: 403, errorMessage: 'Your input was flagged' },
+    }
+    const result = await t.batch([t.csv(3), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(8)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'ok'])
+    expect(report.rows[1]?.error?.code).toBe('usage')
+  })
+
   for (const [status, code, exitCode] of [
     [402, 'credits', 4],
     [401, 'auth', 3],

@@ -527,13 +527,46 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     )
   })
 
-  test('any other 403 stays upstream', async () => {
+  test("any other 403 is a refusal: exit 2, not retryable, OpenRouter's reason kept", async () => {
     const { fake, gen } = setup()
     fake.config.images.status = 403
     fake.config.images.errorMessage = 'Your input was flagged'
     const result = await gen(['p', '-m', SEEDREAM, '--json'])
-    expect(result.exitCode).toBe(7)
-    expect((result.json as { error: { code: string } }).error.code).toBe('upstream')
+    expect(result.exitCode).toBe(2)
+    expect(result.json).toEqual({
+      error: {
+        code: 'usage',
+        message: expect.stringContaining('Your input was flagged'),
+        retryable: false,
+      },
+    })
+  })
+
+  test('a 402 for the in-flight budget is temporary: exit 6, retryable, says how long to wait', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 402
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_in_flight_budget' }
+    fake.config.images.headers = { 'retry-after': '30' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(6)
+    expect(result.json).toEqual({
+      error: { code: 'rate_limited', message: expect.any(String), retryable: true },
+    })
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('openrouter_in_flight_budget')
+    expect(message).toContain('30 seconds')
+    expect(message).not.toMatch(/raise/i)
+    expect(fake.imageRequests()).toHaveLength(1)
+    expect(ledgerOf(result.home)).toEqual([])
+  })
+
+  test('the in-flight refusal still reads clearly without a Retry-After', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 402
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_in_flight_budget' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(6)
+    expect((result.json as { error: { message: string } }).error.message).toMatch(/shortly/)
   })
 
   test('Story 2.4: a server error is retryable', async () => {

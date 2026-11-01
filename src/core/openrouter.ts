@@ -151,11 +151,10 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
 
   function check<T>(
     route: string,
-    status: number,
-    body: unknown,
+    { status, body, headers }: { status: number; body: unknown; headers: Headers },
     schema: z.ZodType<T, unknown>,
   ): T {
-    if (status < 200 || status >= 300) throw statusError(status, body)
+    if (status < 200 || status >= 300) throw statusError(status, body, headers)
     const result = schema.safeParse(body)
     if (!result.success) {
       throw new CosmionError(
@@ -167,8 +166,7 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
   }
 
   async function get<T>(path: string, schema: z.ZodType<T>, key?: string): Promise<T> {
-    const { status, body } = await send(path, { key })
-    return check(`GET ${path}`, status, body, schema)
+    return check(`GET ${path}`, await send(path, { key }), schema)
   }
 
   return {
@@ -184,10 +182,10 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
       return (await get('/key', keyInfoSchema, key)).data
     },
     async getCredits(key) {
-      const { status, body } = await send('/credits', { key })
+      const response = await send('/credits', { key })
       // The docs list 403 for keys that aren't management keys; live, ordinary keys get 200.
-      if (status === 403) return null
-      return check('GET /credits', status, body, creditsSchema).data
+      if (response.status === 403) return null
+      return check('GET /credits', response, creditsSchema).data
     },
     async generateImages(key, request) {
       // A plain setTimeout rather than AbortSignal.timeout(), which fake timers can't drive.
@@ -226,12 +224,7 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
         options.signal?.removeEventListener('abort', onAbort)
       }
 
-      const { data, usage } = check(
-        'POST /images',
-        response.status,
-        response.body,
-        imagesResponseSchema,
-      )
+      const { data, usage } = check('POST /images', response, imagesResponseSchema)
       const cost = z.object({ cost: z.number() }).safeParse(usage)
       const tokens = tokensSchema.safeParse(usage)
       return {
@@ -264,7 +257,7 @@ const errorBodySchema = z.object({
 })
 
 /** The HTTP status table of docs/openrouter-api.md → Errors. */
-function statusError(status: number, body: unknown): CosmionError {
+function statusError(status: number, body: unknown, headers: Headers): CosmionError {
   const parsed = errorBodySchema.safeParse(body)
   const detail = parsed.success ? parsed.data.error.message : undefined
   const because = detail ? `: ${detail}` : ''
@@ -276,11 +269,14 @@ function statusError(status: number, body: unknown): CosmionError {
     case 401:
       return new CosmionError('auth', `OpenRouter rejected the API key${because}`)
     case 402:
+      if (limitSource === 'openrouter_in_flight_budget') {
+        return new CosmionError('rate_limited', inFlightMessage(headers.get('retry-after')))
+      }
       return new CosmionError('credits', outOfCreditsMessage(limitSource))
     case 403:
-      // 403 also means a moderation or permission refusal; only a spent limit is `credits`.
+      // 403 also means a moderation, guardrail or permission refusal: retrying won't change it.
       if (limitSource === undefined && !/key limit/i.test(detail ?? '')) {
-        return new CosmionError('upstream', `OpenRouter failed with status 403${because}`)
+        return new CosmionError('usage', `OpenRouter refused the request${because}`)
       }
       return new CosmionError(
         'credits',
@@ -295,6 +291,15 @@ function statusError(status: number, body: unknown): CosmionError {
     default:
       return new CosmionError('upstream', `OpenRouter failed with status ${status}${because}`)
   }
+}
+
+/** Not a spent limit: OpenRouter is holding money for requests still running, and says when to retry. */
+function inFlightMessage(retryAfter: string | null): string {
+  const wait = retryAfter && /^\d+$/.test(retryAfter) ? `in ${retryAfter} seconds` : 'shortly'
+  return (
+    'OpenRouter is holding money for requests still running, so it refused this one ' +
+    `(openrouter_in_flight_budget). Try again ${wait}, or run fewer at once.`
+  )
 }
 
 /** FR-040a: says which limit ran out, and what to do about it. */

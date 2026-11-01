@@ -265,7 +265,8 @@ Shape: `{ "error": { "code": <int>, "message": "<text>" } }`.
 | 400 | Invalid parameters | Exit 2 with OpenRouter's message; likely a bug or unsupported option |
 | 401 | Missing/invalid key | Exit 3 |
 | 402 | Insufficient credits or key limit | Exit 4, saying which (`error.metadata.limit_source`, e.g. `"openrouter_credits"`, seen live 2026-10-17, with a `remedy_hint`) and linking to openrouter.ai/settings/credits |
-| 403 | A spent key limit, or a moderation or permission refusal | A spent limit (`error.metadata.limit_source` present, or "key limit" in the message) is exit 4, not retryable, keeping OpenRouter's message with its reset time; seen live 2026-11-01 as `Key limit exceeded (daily limit). … $2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.` Anything else is exit 7 |
+| 402 with `limit_source` `openrouter_in_flight_budget` | Money is held for requests still running; OpenRouter documents a `Retry-After` header | Exit 6, retryable, with the wait in the message when given; the refusal was seen live 2026-11-01, the header was not checked |
+| 403 | A spent key limit, or a moderation or permission refusal | A spent limit (`error.metadata.limit_source` present, or "key limit" in the message) is exit 4, not retryable, keeping OpenRouter's message with its reset time; seen live 2026-11-01 as `Key limit exceeded (daily limit). … $2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.` Anything else (moderation, guardrail, permission) is exit 2, not retryable |
 | 404 | Unknown model/resource | Refresh the catalog; exit 5 |
 | 429 | Rate limited | Exit 6, retryable; no automatic retry |
 | 500, 502, 529 | Server or provider error | Exit 7, retryable |

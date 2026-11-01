@@ -349,11 +349,11 @@ once, let them finish and try again one at a time.
 |------|---------|--------------|
 | 0 | Success | |
 | 1 | Unexpected error, or a local write failed | `internal` |
-| 2 | Invalid usage or input: flags, values, files, paths, input needed without a terminal, or OpenRouter refusing the request (400) | `usage` |
+| 2 | Invalid usage or input: flags, values, files, paths, input needed without a terminal, or OpenRouter refusing the request (400, or a 403 such as flagged content; change the request rather than retrying) | `usage` |
 | 3 | No key, or the key was rejected | `auth` |
 | 4 | Insufficient credits or the key's limit reached; the message says which | `credits` |
 | 5 | Unknown model or history id | `not_found` |
-| 6 | Rate limited; retryable | `rate_limited` |
+| 6 | Rate limited, or refused while other requests are running; retryable, and the message says when | `rate_limited` |
 | 7 | OpenRouter, provider or network failure; retryable, except Cosmion's own 5-minute timeout | `upstream` |
 | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks). Not an error: the normal result is printed | |
 | 130 | Interrupted (Ctrl-C); nothing on stdout | |
