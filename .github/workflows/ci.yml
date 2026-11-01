@@ -22,8 +22,9 @@ jobs:
       - run: npm run build
       - run: npm run pack-check
 
-  # On a version tag, after every system passes: publish with npm trusted publishing
-  # (GitHub's OIDC, no stored token), which also adds provenance (FR-062).
+  # On a version tag, after every system passes: stage the version with npm trusted
+  # publishing (GitHub's OIDC, no stored token), which also adds provenance (FR-062). It
+  # goes live only when the maintainer approves it on npmjs.com, with 2FA.
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
@@ -37,10 +38,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1 or newer; Node 22 comes with npm 10.
+      # Staged publishing needs npm 11.15.0 or newer; Node 22 comes with npm 10.
       - run: npm install -g npm@11
       - run: npm ci
       - name: The tag matches package.json's version
         shell: bash
         run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
-      - run: npm publish --provenance --access public
+      - run: npm stage publish --provenance --access public

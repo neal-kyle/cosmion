@@ -37,9 +37,10 @@ Where things are:
 | `node dist/cli/main.js …` | Run the built CLI (or `npm link` once, then `cosmion …`) |
 
 Each change ends with lint, test and build passing. Releasing: bump `version` in
-`package.json`, merge to `main`, push a tag `v<version>`; CI publishes to npm once every
-system passes. npm refuses that publish unless `repository.url` in `package.json` matches
-the GitHub repo and the repo is public.
+`package.json`, merge to `main`, push a tag `v<version>`; CI stages it on npm once every
+system passes, and the maintainer approves it on npmjs.com (Staged Packages tab, with 2FA)
+to make it live. npm refuses it unless `repository.url` in `package.json` matches the
+GitHub repo and the repo is public.
 
 `COSMION_TEST_OPENROUTER_URL=<url>` points the built CLI at a fake OpenRouter (FR-058);
 `serveFakeOpenRouter()` in `tests/helpers/fake-openrouter.ts` serves one. It's test-only:
