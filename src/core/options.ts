@@ -53,6 +53,13 @@ export function toSettings(model: ImageModel, options: GenOptions): Settings {
   return settings
 }
 
+/** The flag that sets an Images API field, for showing next to the field's name. */
+export function flagOf(field: string): string | undefined {
+  if (field === 'input_references') return '--ref'
+  const name = Object.entries(SETTING_FIELDS).find(([, sent]) => sent === field)?.[0]
+  return name && `--${name}`
+}
+
 function allows(parameter: Parameter, value: string | number): boolean {
   if (parameter.type === 'enum') return parameter.values.includes(String(value))
   if (parameter.type === 'range') {
@@ -70,10 +77,9 @@ function describe(parameter: Parameter): string {
 }
 
 function supportedFlags(model: ImageModel): string {
-  const flags = Object.entries(SETTING_FIELDS)
-    .filter(([, field]) => model.supported_parameters[field])
-    .map(([name]) => `--${name}`)
-  if (model.supported_parameters.input_references) flags.push('--ref')
+  const flags = [...Object.values(SETTING_FIELDS), 'input_references']
+    .filter((field) => model.supported_parameters[field])
+    .map((field) => flagOf(field) as string)
   return flags.length ? flags.join(', ') : 'no options'
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { CosmionError } from '../../src/core/errors.js'
 import type { ImageModel } from '../../src/core/openrouter.js'
-import { randomSeed, sameSettingsKey, toSettings } from '../../src/core/options.js'
+import { flagOf, randomSeed, sameSettingsKey, toSettings } from '../../src/core/options.js'
 
 function model(supported_parameters: ImageModel['supported_parameters']): ImageModel {
   return { id: 'test/model', name: 'Test', description: '', supported_parameters }
@@ -154,5 +154,18 @@ describe('sameSettingsKey', () => {
     expect(sameSettingsKey({ resolution: '1K' }, 0)).not.toBe(base)
     expect(sameSettingsKey({ resolution: '2K', n: 2 }, 0)).not.toBe(base)
     expect(sameSettingsKey({ resolution: '2K', output_format: 'png' }, 0)).not.toBe(base)
+  })
+})
+
+describe('flagOf', () => {
+  test('gives the flag that sets an API field', () => {
+    expect(flagOf('n')).toBe('--count')
+    expect(flagOf('aspect_ratio')).toBe('--aspect')
+    expect(flagOf('input_references')).toBe('--ref')
+    expect(flagOf('seed')).toBe('--seed')
+  })
+
+  test('is undefined for a field no flag sets', () => {
+    expect(flagOf('mystery')).toBeUndefined()
   })
 })
