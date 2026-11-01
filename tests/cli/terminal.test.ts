@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, test } from 'vitest'
 import { commands } from '../../src/cli/commands/index.js'
@@ -125,7 +125,9 @@ describe('on a terminal', () => {
     const { cli } = setup()
     const result = await cli(['gen', 'a lighthouse', '-m', SEEDREAM], TERMINAL)
     expect(result.exitCode).toBe(0)
-    expect(stripVTControlCharacters(result.stdout).trim()).toMatch(/^\/.*cosmion-\S+\.jpe?g$/)
+    const saved = stripVTControlCharacters(result.stdout).trim()
+    expect(isAbsolute(saved)).toBe(true)
+    expect(basename(saved)).toMatch(/^cosmion-\S+\.jpe?g$/)
     const summary = stripVTControlCharacters(result.stderr)
     expect(summary).toMatch(/✓ Generated \S+/)
     expect(summary).toContain(SEEDREAM)
@@ -355,7 +357,7 @@ describe('doctor on a terminal', () => {
     const result = await cli(['doctor'], { ...TERMINAL, columns: 50 })
     for (const line of stripVTControlCharacters(result.stdout).split(/[\r\n]+/)) {
       // A single path can't be broken; only words may reach past the edge.
-      if (!line.includes('/')) expect(line.length).toBeLessThanOrEqual(50)
+      if (!/[/\\]/.test(line)) expect(line.length).toBeLessThanOrEqual(50)
     }
   })
 })

@@ -32,7 +32,10 @@ test('20 gen processes at once leave 20 complete ledger lines', { timeout: 60_00
           cwd,
           env,
         },
-      )
+      ).catch((error) => {
+        // With --json the error is on stdout, which the failure's own message leaves out.
+        throw new Error(`${error.message}\n${error.stdout}`)
+      })
     const results = await Promise.all(Array.from({ length: 20 }, (_, i) => gen(i)))
 
     const lines = readFileSync(join(home, 'data', 'ledger.jsonl'), 'utf8').split('\n')

@@ -1,4 +1,11 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -273,6 +280,18 @@ describe('the catalog cache (FR-022)', () => {
     const { models } = setup()
     const { home } = await models(['--json'])
     expect(existsSync(cacheFile(home))).toBe(true)
+    expect(readdirSync(join(home, 'cache'))).toEqual(['catalog.json'])
+  })
+
+  // On Windows a rename can fail while another process has the file open.
+  test('a cache that cannot be saved is a warning, not a failure', async () => {
+    const { fake, models } = setup()
+    const home = mkdtempSync(join(tmpdir(), 'cosmion-test-'))
+    mkdirSync(join(cacheFile(home), 'in-the-way'), { recursive: true })
+    const result = await models(['--json'], { home })
+    expect(result.exitCode).toBe(0)
+    expect((result.json as Listing).models).toHaveLength(fake.config.models.length)
+    expect(result.stderr).toContain("Couldn't save the model catalog")
     expect(readdirSync(join(home, 'cache'))).toEqual(['catalog.json'])
   })
 

@@ -51,7 +51,7 @@ export async function loadCatalog(
     )
     return { catalog: cached, refreshTried: true, stale: true }
   }
-  await writeCache(file, fresh)
+  await writeCache(ctx, file, fresh)
   return { catalog: fresh, refreshTried: true, stale: false }
 }
 
@@ -108,8 +108,12 @@ async function readCache(file: string): Promise<Catalog | null> {
   }
 }
 
-/** Written to a temporary file and renamed, so a reader never sees half a file. */
-async function writeCache(file: string, catalog: Catalog): Promise<void> {
+/**
+ * Written to a temporary file and renamed, so a reader never sees half a file. It's only a
+ * cache, so failing to save it never fails the command: on Windows the rename can fail
+ * while another process has the file open.
+ */
+async function writeCache(ctx: Context, file: string, catalog: Catalog): Promise<void> {
   const temporary = `${file}.${randomBytes(4).toString('hex')}.tmp`
   try {
     await mkdir(dirname(file), { recursive: true })
@@ -118,6 +122,6 @@ async function writeCache(file: string, catalog: Catalog): Promise<void> {
   } catch (error) {
     await rm(temporary, { force: true })
     const reason = error instanceof Error ? error.message : String(error)
-    throw new CosmionError('internal', `Couldn't save the model catalog to ${file} (${reason}).`)
+    warn(ctx, `Couldn't save the model catalog to ${file} (${reason}).`)
   }
 }
