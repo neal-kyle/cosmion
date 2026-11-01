@@ -48,7 +48,7 @@ export function homeScreen(
     style('dim', 'Options'),
     ...OPTIONS.map(([flag, about]) => entry(flag, about)),
     '',
-    `${style('dim', 'Try')}  cosmion gen "a lighthouse at dusk" -m bytedance-seed/seedream-4.5`,
+    `${style('dim', 'Try')}  cosmion gen "a lighthouse on a tiny moon" -m bytedance-seed/seedream-4.5`,
     style('dim', 'Run cosmion <command> --help for its options; csn is the short form of cosmion.'),
     '',
   ].join('\n')

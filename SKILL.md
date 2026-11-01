@@ -92,7 +92,7 @@ Options: `-m, --model <id>` (default `COSMION_MODEL`), the gen options above,
   "id": "k3f9x2ab",
   "created_at": "2026-10-17T14:03:11.204Z",
   "model": "bytedance-seed/seedream-4.5",
-  "prompt": "a lighthouse at dusk",
+  "prompt": "a lighthouse on a tiny moon",
   "settings": { "aspect_ratio": "16:9", "resolution": "2K", "seed": 1234 },
   "references": [],
   "images": [
@@ -356,7 +356,7 @@ With `--json`, a failure prints one object on stdout:
 
 ```sh
 cosmion price -m bytedance-seed/seedream-4.5 --resolution 2K --json
-cosmion gen "a lighthouse at dusk, watercolor" -m bytedance-seed/seedream-4.5 \
+cosmion gen "a lighthouse on a tiny moon, watercolor" -m bytedance-seed/seedream-4.5 \
   --resolution 2K --out images/lighthouse.png --json
 ```
 
