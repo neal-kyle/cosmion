@@ -130,6 +130,27 @@ describe('models', () => {
     }
   })
 
+  test('the list names options by their flags too', async () => {
+    const { models } = setup()
+    const result = await models([])
+    const row = result.stdout
+      .split('\n')
+      .find((line) => line.startsWith('bytedance-seed/seedream-4.5'))
+    expect(row).toContain('--resolution, --aspect, --count, --ref, --seed')
+  })
+
+  test('an option no flag sets keeps its field name, in the list and in models <id>', async () => {
+    const { fake, models } = setup()
+    const model = fake.config.models[0]
+    if (!model) throw new Error('no fixture model')
+    Object.assign(model.supported_parameters as object, { size: { type: 'boolean' } })
+    const list = await models([])
+    const row = list.stdout.split('\n').find((line) => line.startsWith(model.id))
+    expect(row).toContain('--seed, size')
+    const detail = await models([model.id])
+    expect(detail.stdout).toMatch(/^\s*size\s+yes/m)
+  })
+
   test('every request carries the Cosmion title and no key', async () => {
     const { fake, models } = setup()
     await models(['--json'])
@@ -255,15 +276,6 @@ describe('models <id>', () => {
     expect(result.stdout).toMatch(/^\s*--aspect \(sends aspect_ratio\)\s+/m)
     expect(result.stdout).toMatch(/^\s*--count \(sends n\)\s+1 to 10/m)
     expect(result.stdout).toMatch(/^\s*--ref \(sends input_references\)\s+/m)
-  })
-
-  test('the list names options by their flags too', async () => {
-    const { models } = setup()
-    const result = await models([])
-    const row = result.stdout
-      .split('\n')
-      .find((line) => line.startsWith('bytedance-seed/seedream-4.5'))
-    expect(row).toContain('--resolution, --aspect, --count, --ref, --seed')
   })
 })
 

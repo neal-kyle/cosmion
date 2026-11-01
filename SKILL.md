@@ -144,7 +144,9 @@ Options: `--refresh` (fetch the catalog again; it is otherwise cached for 24 hou
 `--json`.
 
 - List: `{"models": [{"id", "name", "accepts_references", "max_references", "parameters", "price"}], "fetched_at"}`.
-- One model: `{"id", "name", "description", "parameters", "endpoints": [{"provider_name", "provider_tag", "supported_parameters", "pricing"}], "fetched_at"}`. `parameters` lists the options it supports and their allowed values. The plain-text output names each option by its flag (`--count`); `--json` uses the field names (`n`).
+- One model: `{"id", "name", "description", "parameters", "endpoints": [{"provider_name", "provider_tag", "supported_parameters", "pricing"}], "fetched_at"}`. `parameters` lists the options it supports and their allowed values.
+
+The plain-text output names options by their flag where one exists (`--count`), otherwise by the field; `--json` always uses the field names (`n`).
 
 `price` is `{"kind", "cost_usd", "notes"}`, as `cosmion price` gives it.
 
