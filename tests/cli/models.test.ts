@@ -268,14 +268,14 @@ describe('models <id>', () => {
     expect(result.stdout).toContain('0.04')
   })
 
-  test('text output names each option by its flag, with the field it sends when that differs', async () => {
+  test('text output names each option by its flag', async () => {
     const { models } = setup()
     const result = await models(['bytedance-seed/seedream-4.5'])
     expect(result.stdout).toMatch(/^\s*--resolution\s+1K, 2K, 4K/m)
     expect(result.stdout).toMatch(/^\s*--seed\s+yes/m)
-    expect(result.stdout).toMatch(/^\s*--aspect \(sends aspect_ratio\)\s+/m)
-    expect(result.stdout).toMatch(/^\s*--count \(sends n\)\s+1 to 10/m)
-    expect(result.stdout).toMatch(/^\s*--ref \(sends input_references\)\s+/m)
+    expect(result.stdout).toMatch(/^\s*--aspect\s+/m)
+    expect(result.stdout).toMatch(/^\s*--count\s+1 to 10/m)
+    expect(result.stdout).toMatch(/^\s*--ref\s+/m)
   })
 })
 

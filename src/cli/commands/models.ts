@@ -102,7 +102,7 @@ function listText(list: List): string {
     model.name,
     priceText(model.price),
     model.accepts_references ? String(model.max_references) : '-',
-    flagList(model.parameters),
+    model.parameters.map(optionLabel).join(', '),
   ])
   return table([['ID', 'NAME', 'PRICE', 'REFS', 'OPTIONS'], ...rows])
 }
@@ -151,7 +151,7 @@ function listPretty(list: List, columns: number): string {
         },
         {
           header: 'options',
-          value: (model) => flagList(model.parameters),
+          value: (model) => model.parameters.map(optionLabel).join(', '),
           role: () => 'dim',
           drop: 3,
         },
@@ -197,16 +197,9 @@ function detailPretty(detail: Detail, columns: number): string {
   ].join('\n')
 }
 
-/** The flags of a model's options, for the list: a field no flag sets keeps its name. */
-function flagList(fields: string[]): string {
-  return fields.map((field) => flagOf(field) ?? field).join(', ')
-}
-
-/** An option as its flag, with the field it sends when that differs: `--count (sends n)`. */
+/** An option as the flag that sets it; a field no flag sets keeps its name. */
 function optionLabel(field: string): string {
-  const flag = flagOf(field)
-  if (!flag) return field
-  return flag === `--${field}` ? flag : `${flag} (sends ${field})`
+  return flagOf(field) ?? field
 }
 
 function describeOption(option: Parameter): string {
