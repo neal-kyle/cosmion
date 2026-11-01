@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { referenceSupport } from '../../core/catalog.js'
 import { endpointSchema, type Parameter, supportedParametersSchema } from '../../core/openrouter.js'
+import { flagOf } from '../../core/options.js'
 import { price as priceOf } from '../../core/pricing.js'
 import { loadCatalog, loadModel } from '../catalog-cache.js'
 import { defineCommand } from '../define.js'
@@ -101,14 +102,14 @@ function listText(list: List): string {
     model.name,
     priceText(model.price),
     model.accepts_references ? String(model.max_references) : '-',
-    model.parameters.join(', '),
+    flagList(model.parameters),
   ])
   return table([['ID', 'NAME', 'PRICE', 'REFS', 'OPTIONS'], ...rows])
 }
 
 function detailText(detail: Detail): string {
   const options = Object.entries(detail.parameters).map(([name, option]) => [
-    `  ${name}`,
+    `  ${optionLabel(name)}`,
     describeOption(option),
   ])
   const providers = detail.endpoints.flatMap((endpoint) => {
@@ -150,7 +151,7 @@ function listPretty(list: List, columns: number): string {
         },
         {
           header: 'options',
-          value: (model) => model.parameters.join(', '),
+          value: (model) => flagList(model.parameters),
           role: () => 'dim',
           drop: 3,
         },
@@ -167,7 +168,7 @@ function listPretty(list: List, columns: number): string {
 
 function detailPretty(detail: Detail, columns: number): string {
   const options = Object.entries(detail.parameters).map(([name, option]): [string, string] => [
-    name,
+    optionLabel(name),
     describeOption(option),
   ])
   const providers = detail.endpoints.flatMap((endpoint) => {
@@ -194,6 +195,18 @@ function detailPretty(detail: Detail, columns: number): string {
     style('bold', 'Providers'),
     ...providers,
   ].join('\n')
+}
+
+/** The flags of a model's options, for the list: a field no flag sets keeps its name. */
+function flagList(fields: string[]): string {
+  return fields.map((field) => flagOf(field) ?? field).join(', ')
+}
+
+/** An option as its flag, with the field it sends when that differs: `--count (sends n)`. */
+function optionLabel(field: string): string {
+  const flag = flagOf(field)
+  if (!flag) return field
+  return flag === `--${field}` ? flag : `${flag} (sends ${field})`
 }
 
 function describeOption(option: Parameter): string {

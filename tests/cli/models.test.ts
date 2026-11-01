@@ -246,6 +246,25 @@ describe('models <id>', () => {
     expect(result.stdout).toContain('output_image')
     expect(result.stdout).toContain('0.04')
   })
+
+  test('text output names each option by its flag, with the field it sends when that differs', async () => {
+    const { models } = setup()
+    const result = await models(['bytedance-seed/seedream-4.5'])
+    expect(result.stdout).toMatch(/^\s*--resolution\s+1K, 2K, 4K/m)
+    expect(result.stdout).toMatch(/^\s*--seed\s+yes/m)
+    expect(result.stdout).toMatch(/^\s*--aspect \(sends aspect_ratio\)\s+/m)
+    expect(result.stdout).toMatch(/^\s*--count \(sends n\)\s+1 to 10/m)
+    expect(result.stdout).toMatch(/^\s*--ref \(sends input_references\)\s+/m)
+  })
+
+  test('the list names options by their flags too', async () => {
+    const { models } = setup()
+    const result = await models([])
+    const row = result.stdout
+      .split('\n')
+      .find((line) => line.startsWith('bytedance-seed/seedream-4.5'))
+    expect(row).toContain('--resolution, --aspect, --count, --ref, --seed')
+  })
 })
 
 describe('the catalog cache (FR-022)', () => {
