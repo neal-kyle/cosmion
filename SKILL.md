@@ -76,6 +76,10 @@ Options: `-m, --model <id>` (default `COSMION_MODEL`), the gen options above,
 - `--out <path>` is a folder if it exists as one or ends with `/`; otherwise it is the
   exact file to write (`<stem>-<k><ext>` for several images). An `--out` ending in an
   image extension also asks the model for that format when `--format` isn't given.
+  A model that can't make that format still writes to the exact path, so the file can
+  hold another format (say WebP in `x.png`); `images[].format` in the output says which,
+  and a warning goes to stderr. To get the right extension without checking, leave
+  `--out` off or give a folder, and Cosmion names the file by its real format.
 - Existing files are never replaced unless `--force` is passed.
 - Everything is checked (key, model, options, references, output paths) before anything
   is sent or spent.
