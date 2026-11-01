@@ -287,7 +287,7 @@ from.
 **Manual checks by the maintainer** (they need real money, a real key or a fresh machine)
 
 - [ ] T099 Set up npm trusted publishing for `cosmion` on npmjs.com, and give the GitHub repo the same description as the README's first line and topics such as `openrouter`, `image-generation`, `cli` and `ai-agents`
-- [ ] T100 SC-002: generate with at least 5 per-image models and check every `exact` price equals the charged `usage.cost` (Riverflow excepted; after one generation `price` shows its last actual cost). Also run one with `--count 2` and a `--ref` on a model that charges for references, to check that references are charged once per request, not per image (FR-033)
+- [x] T100 SC-002: generate with at least 5 per-image models and check every `exact` price equals the charged `usage.cost` (Riverflow excepted; after one generation `price` shows its last actual cost). Also run one with `--count 2` and a `--ref` on a model that charges for references, to check that references are charged once per request, not per image (FR-033)
 - [ ] T101 SC-001: from `npm install -g cosmion` to a saved image in under 2 minutes
 - [ ] T102 SC-007: an agent given only `SKILL.md` and `--help` generates an image to a given path and reports its cost
 
