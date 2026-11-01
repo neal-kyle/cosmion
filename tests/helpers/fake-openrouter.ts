@@ -88,6 +88,8 @@ export interface ImagesConfig {
   status?: number
   /** The `error.metadata` of that error. */
   errorMetadata?: Record<string, unknown>
+  /** The `error.message` of that error, when the test depends on OpenRouter's wording. */
+  errorMessage?: string
   /** Wait this long (milliseconds) before answering. */
   delayMs: number
   /** Replaces the whole successful body (a malformed response). */
@@ -247,7 +249,9 @@ async function images(
 ): Promise<Response> {
   const config = { ...base, ...base.byPrompt?.[body.prompt ?? ''] }
   if (config.delayMs > 0) await sleep(config.delayMs, signal)
-  if (config.status !== undefined) return errorResponse(config.status, config.errorMetadata)
+  if (config.status !== undefined) {
+    return errorResponse(config.status, config.errorMetadata, config.errorMessage)
+  }
   if (config.rawBody !== undefined) return new Response(config.rawBody, { status: 200 })
   const data =
     config.data ??

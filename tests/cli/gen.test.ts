@@ -463,6 +463,10 @@ describe('nothing is sent when a pre-check fails (FR-012)', () => {
   })
 })
 
+const KEY_LIMIT_MESSAGE =
+  'Key limit exceeded (daily limit). Manage it using https://openrouter.ai/settings/keys ' +
+  '$2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.'
+
 describe('failures from OpenRouter (FR-016, FR-040)', () => {
   test.each([
     [400, 2, 'usage', false],
@@ -495,6 +499,41 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     const { message } = (result.json as { error: { message: string } }).error
     expect(message).toContain('https://openrouter.ai/settings/credits')
     expect(message).toMatch(/credits/)
+  })
+
+  test("403 for the key's daily limit exits 4 and isn't retryable, keeping the reset time", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMessage = KEY_LIMIT_MESSAGE
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect(result.json).toEqual({
+      error: { code: 'credits', message: expect.any(String), retryable: false },
+    })
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('$2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z')
+    expect(fake.imageRequests()).toHaveLength(1)
+    expect(ledgerOf(result.home)).toEqual([])
+  })
+
+  test('a 403 that names a spending limit only in its metadata exits 4', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_key_limit' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect((result.json as { error: { message: string } }).error.message).toContain(
+      'openrouter_key_limit',
+    )
+  })
+
+  test('any other 403 stays upstream', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMessage = 'Your input was flagged'
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(7)
+    expect((result.json as { error: { code: string } }).error.code).toBe('upstream')
   })
 
   test('Story 2.4: a server error is retryable', async () => {

@@ -268,6 +268,7 @@ function statusError(status: number, body: unknown): CosmionError {
   const parsed = errorBodySchema.safeParse(body)
   const detail = parsed.success ? parsed.data.error.message : undefined
   const because = detail ? `: ${detail}` : ''
+  const limitSource = parsed.success ? parsed.data.error.metadata?.limit_source : undefined
 
   switch (status) {
     case 400:
@@ -275,9 +276,17 @@ function statusError(status: number, body: unknown): CosmionError {
     case 401:
       return new CosmionError('auth', `OpenRouter rejected the API key${because}`)
     case 402:
+      return new CosmionError('credits', outOfCreditsMessage(limitSource))
+    case 403:
+      // 403 also means a moderation or permission refusal; only a spent limit is `credits`.
+      if (limitSource === undefined && !/key limit/i.test(detail ?? '')) {
+        return new CosmionError('upstream', `OpenRouter failed with status 403${because}`)
+      }
       return new CosmionError(
         'credits',
-        outOfCreditsMessage(parsed.success ? parsed.data.error.metadata?.limit_source : undefined),
+        // OpenRouter's own message says how much is used and when the limit resets.
+        `This key's spending limit has been reached${limitSource ? ` (${limitSource})` : ''}${because || '.'} ` +
+          "Wait for the reset if it has one, raise the key's limit on OpenRouter, or use another key.",
       )
     case 404:
       return new CosmionError('not_found', `OpenRouter has no such model or resource${because}`)

@@ -492,6 +492,19 @@ describe('stopping (FR-073a, FR-075, FR-078)', () => {
     expect(statuses(noBudget.json as Report)).toEqual(['skipped_resumed', 'ok', 'ok'])
   })
 
+  test("a 403 for the key's limit stops new rows like any credits error", async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: { status: 403, errorMessage: 'Key limit exceeded (daily limit).' },
+    }
+    const result = await t.batch([t.csv(4), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(4)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'not_run', 'not_run'])
+    expect(report.stopped?.code).toBe('credits')
+    expect(t.fake.imageRequests()).toHaveLength(2)
+  })
+
   for (const [status, code, exitCode] of [
     [402, 'credits', 4],
     [401, 'auth', 3],

@@ -212,6 +212,11 @@ usage fields and more; `label` defaults to a masked form of the key
 Useful for: checking a key works (`cosmion auth`), and showing remaining budget when the key
 has a limit.
 
+**The figures can lag a generation that just finished.** Live, 2026-11-01: about 9 seconds
+after two generations finished, `limit_remaining` hadn't moved, though the response is
+`cache-control: private, no-store`. Minutes later it matched the ledger exactly. A daily
+limit's `limit_reset` is `"daily"`, and `budgets[].resets_at` gives the time.
+
 ### `GET /credits`: account balance
 
 Returns, inside `data` (checked live 2026-10-22, as for `GET /key`), `total_credits` and
@@ -260,6 +265,7 @@ Shape: `{ "error": { "code": <int>, "message": "<text>" } }`.
 | 400 | Invalid parameters | Exit 2 with OpenRouter's message; likely a bug or unsupported option |
 | 401 | Missing/invalid key | Exit 3 |
 | 402 | Insufficient credits or key limit | Exit 4, saying which (`error.metadata.limit_source`, e.g. `"openrouter_credits"`, seen live 2026-10-17, with a `remedy_hint`) and linking to openrouter.ai/settings/credits |
+| 403 | A spent key limit, or a moderation or permission refusal | A spent limit (`error.metadata.limit_source` present, or "key limit" in the message) is exit 4, not retryable, keeping OpenRouter's message with its reset time; seen live 2026-11-01 as `Key limit exceeded (daily limit). … $2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.` Anything else is exit 7 |
 | 404 | Unknown model/resource | Refresh the catalog; exit 5 |
 | 429 | Rate limited | Exit 6, retryable; no automatic retry |
 | 500, 502, 529 | Server or provider error | Exit 7, retryable |

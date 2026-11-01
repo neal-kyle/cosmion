@@ -259,6 +259,7 @@ Shows which key is in use and what it has left.
 Options: `--json`.
 
 `{"source": "env|file|none", "valid", "label", "limit_usd", "limit_remaining_usd", "usage_usd", "balance_usd"}`. A rejected key is `"valid": false` with exit 0.
+The figures are OpenRouter's, read fresh each time, and can lag a generation that just finished.
 
 ### `cosmion auth logout`
 
@@ -336,6 +337,11 @@ With `--json`, a failure prints one object on stdout:
 ```
 
 `retryable: true` means trying the same command again later may work.
+
+`credits` is never retryable, even when a key's daily limit resets at a time the message
+states: tell the user, then wait for that time or have the limit raised. Generations running
+at the same time may count against the limit before they finish, so if you ran several at
+once, let them finish and try again one at a time.
 
 ## Exit codes
 

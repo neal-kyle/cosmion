@@ -13,7 +13,10 @@ export const exitCodes = {
       'Invalid usage or input (flags, values, files, paths, interactive input needed without a TTY, OpenRouter 400)',
   },
   auth: { code: 3, meaning: 'No key, or key rejected (401)' },
-  credits: { code: 4, meaning: 'Insufficient credits or key limit reached (402)' },
+  credits: {
+    code: 4,
+    meaning: 'Insufficient credits or key limit reached (402, or 403 naming a limit)',
+  },
   not_found: { code: 5, meaning: 'Unknown model or ledger id (incl. OpenRouter 404)' },
   rate_limited: { code: 6, meaning: 'Rate limited (429)' },
   upstream: {
