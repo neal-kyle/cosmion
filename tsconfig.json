@@ -1,0 +1,17 @@
+{
+  // Type-checks everything (source, tests, configs) for `npm run lint`.
+  // The build uses tsconfig.build.json, which compiles only src/.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "tests", "scripts", "vitest.config.ts"]
+}

@@ -1,10 +1,9 @@
-# Oriel Constitution
+# Cosmion Constitution
 
-Oriel is two products for generating images with any model on OpenRouter,
-bring-your-own-key: the **CLI** (`oriel`, the primary product, for developers and their
-agents, built first) and later a **desktop app**. They share code, never data. The
-owner is not a full-time developer and maintains Oriel alone, with an AI agent; every
-principle below serves that.
+Cosmion is a CLI (`cosmion`) for generating images with any model on OpenRouter,
+bring-your-own-key, for developers and their agents. It is maintained by one person, not
+a full-time developer, working with an AI agent; every principle below serves that.
+These rules apply to everyone who works on Cosmion, people and agents alike.
 
 ## Core Principles
 
@@ -27,8 +26,8 @@ hypothetical future one.
 
 - **Single responsibility:** each module does one job (e.g. pricing doesn't know how the
   ledger is stored). Files stay small enough to read in one sitting.
-- **Dependency inversion at real seams only:** the OpenRouter client, the ledger /
-  library, and the settings/key store are passed in where that enables testing without
+- **Dependency inversion at real seams only:** the OpenRouter client, the ledger, and the
+  settings/key store are passed in where that enables testing without
   network or real keys. Everything else just imports what it needs.
 - **Skip the ceremony:** no interface for every class, no class hierarchies, no
   dependency-injection containers. Plain functions and modules are the default.
@@ -46,12 +45,11 @@ hypothetical future one.
 For each requirement: write a failing test, show it fails, make it pass with the
 simplest code, show it passes, then tidy up.
 
-- **Strictly:** `packages/core` (pricing, model catalog), the CLI's ledger and its
-  behavior (commands, `--json` output, exit codes), and later budget caps. This is where
+- **Strictly:** `src/core` (pricing, model catalog), the ledger and the CLI's behavior
+  (commands, `--json` output, exit codes), and batch budgets. This is where
   bugs cost money or break agents.
-- **Behavior only:** UI components and app logic. Test what a component *does*, not how
-  it looks.
-- **Not test-first:** visual design, judged in `/design` prototypes and CI screenshots.
+- **Behavior only:** any interactive interface. Test what it *does*, not how it looks.
+- **Not test-first:** visual design.
 - Never call the real OpenRouter API or touch the user's real settings in tests; use
   injected fakes and a temporary data and config folder per test.
 - Test through public functions and CLI output, not internal details.
@@ -62,47 +60,62 @@ simplest code, show it passes, then tidy up.
 
 The CLI is used by agents. `--json` on every command, data on stdout, logs on stderr,
 stable exit codes, no prompts without a TTY. Changing any of these is a breaking change
-and needs the owner's explicit approval.
+and needs the maintainer's explicit approval.
 
-### VI. Decoupled products
+### VI. Logic apart from interface, data per product
 
-The CLI and the desktop app share code (`packages/core`) and never data: separate
-settings, history and images. Nothing may make one read or depend on the other's data.
+`src/core` holds the logic and never imports from the CLI, prints or exits the process.
+If another product is ever built on this code, it shares that code and never data:
+separate settings, history and images.
 
 ## Project Documents
 
-These are the source of truth; specs and plans reference them rather than repeat them.
+These are the source of truth:
 
-- `ARCHITECTURE.md`: how it's built, with a decision log.
-- `DESIGN.md`: the app's brand, look and product experience.
-- `ROADMAP.md`: build order and every deferred item.
-- `docs/openrouter-api.md`: the OpenRouter API as Oriel uses it. Items marked
+- `specs/`: each feature's spec, plan and tasks: what's built and how, including the
+  technical decisions and their reasons.
+- `docs/openrouter-api.md`: the OpenRouter API as Cosmion uses it. Items marked
   **(verify)** must be checked against the live API before a spec depends on them.
 
 Settled decisions in these documents aren't re-litigated quietly: if one seems wrong,
-say so and explain why. When a decision changes, update the matching document (and the
-decision log) in the same piece of work.
+say so and explain why. When a decision changes, update the matching document in the
+same piece of work.
+
+Every tracked file will be public. Nothing promises work that isn't specced; anything
+about possible future work is worded as an idea, never a plan.
 
 ## Development Workflow
 
-- Every feature or meaningful behavior change goes through Spec Kit: specify → clarify
-  (when anything is ambiguous) → plan → tasks → analyze → implement. The owner approves
-  the spec, the plan and the tasks; no tests or code before that.
+- A new capability goes through Spec Kit, in its own `specs/NNN-name`. The maintainer
+  approves the spec, the plan and the tasks; no tests or code before that.
+- A spec's folder (`spec.md`, `plan.md`, `tasks.md`) is a record of how a feature was
+  built, not a living document. While its branch is open, correct whichever of them a
+  change makes wrong. Once merged to `main`, they aren't edited again.
+- Everything else goes straight to a pull request, with tests, and with `README.md` and
+  `SKILL.md` updated when behavior changes. No spec needed.
 - Specs describe behavior, not implementation, and stay short. CLI features include the
   exact commands, flags, JSON output and exit codes.
 - Tasks are grouped into phases that each leave the project working and tested.
   Implement one phase at a time, then report and wait.
-- If building reveals the spec was wrong, update the spec and tell the owner; the spec
-  always matches what shipped.
-- No spec needed for bug fixes that restore specced behavior, refactors that don't
-  change behavior, dependency updates, or docs. A bug fix still starts with a failing
-  test.
-- Visual and interaction design is explored with `/design` before it's specced.
+- A bug fix starts with a failing test.
+
+### Git
+
+- Never work on `main`. Specced work happens on its Spec Kit branch (`NNN-name`);
+  anything else on a short-lived branch named for what it is (`fix/…`, `docs/…`,
+  `chore/…`). Every change reaches `main` through a pull request.
+- Commit only when the person you're working for asks.
+- One coherent change per commit (a feature, a fix, a refactor, a docs update), so each
+  can be understood or reverted on its own. Don't bundle unrelated changes, and don't
+  split one change into tiny commits (e.g. one per file) unless that's genuinely clearer.
+- Docs updates that belong to a change go in the same commit as that change.
+- Messages: a short summary line in the imperative ("Add ledger migrations"), then a body
+  explaining why when it isn't obvious.
 
 ## Governance
 
 This constitution guides every Spec Kit command. Plans that add complexity beyond these
-principles must justify it in the plan. Amendments are made with the owner's approval
-and recorded by bumping the version below.
+principles must justify it in the plan. Amendments are made with the maintainer's
+approval and recorded by bumping the version below.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-17
+**Version**: 1.5.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-31

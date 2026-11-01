@@ -18,3 +18,7 @@ Thumbs.db
 
 # Personal Claude Code settings (project skills in .claude/skills are shared)
 .claude/settings.local.json
+
+# Local-only files
+design/
+ARCHITECTURE.md

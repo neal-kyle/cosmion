@@ -1,0 +1,2 @@
+# LF everywhere, so Biome's format check passes on Windows checkouts too.
+* text=auto eol=lf
