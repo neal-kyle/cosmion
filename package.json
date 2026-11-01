@@ -11,6 +11,10 @@
   ],
   "license": "MIT",
   "author": "Kyle Neal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neal-kyle/cosmion.git"
+  },
   "type": "module",
   "bin": {
     "cosmion": "dist/cli/main.js",
