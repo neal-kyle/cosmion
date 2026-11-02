@@ -54,8 +54,8 @@ You need Node 22.12 or newer, on macOS, Linux or Windows.
 3. Generate an image:
 
    ```sh
-   cosmion gen "a red bicycle outside a bakery, watercolor" -m bytedance-seed/seedream-4.5 \
-     --resolution 2K --out bicycle.png
+   cosmion gen "a tiny voxel space station orbiting a ringed planet, isometric" \
+     -m bytedance-seed/seedream-4.5 --resolution 2K --out station.png
    ```
 
    `cosmion gen` starts straight away, without showing the price or asking you to confirm,
@@ -91,8 +91,9 @@ cosmion skill install --dir <path>
 
 Then ask your agent something like this:
 
-> Make a 16:9 hero image of a bakery at sunrise for the landing page and save it as
-> `public/hero.png`. Tell me what it will cost before you generate it.
+> Make a 16:9 hero image of a small research dome on a rust-red plain at sunset, two moons
+> overhead, for the landing page and save it as `public/hero.png`. Tell me what it will cost
+> before you generate it.
 
 The skill tells agents to check the price when cost matters, but an agent won't always stop
 to tell you first. If you want to see the price before it spends anything, ask for that, as
@@ -103,8 +104,8 @@ result:
 
 ```sh
 cosmion price -m bytedance-seed/seedream-4.5 --aspect 16:9 --json
-cosmion gen "a bakery at sunrise" -m bytedance-seed/seedream-4.5 --aspect 16:9 \
-  --out public/hero.png --json
+cosmion gen "a small research dome on a rust-red plain at sunset, two moons overhead" \
+  -m bytedance-seed/seedream-4.5 --aspect 16:9 --out public/hero.png --json
 ```
 
 Every command takes `--json` and prints one JSON object on stdout. Exit codes are stable,
@@ -221,7 +222,7 @@ My first attempt was
 [`pp-openrouter-image`](https://www.skills.sh/mvanhorn/printing-press-library/pp-openrouter-image),
 now in the CLI Printing Press library. I made it with Printing Press and an AI agent called
 Hermes, texting instructions over Telegram until it was ready to publish. Printing Press
-has its own way of building things, though, and it's code lives in their library. I wanted to build something that felt more like my own product, and something I could share from my own repo.
+has its own way of building things, though, and its code lives in their library. I wanted to build something that felt more like my own product, and something I could share from my own repo.
 
 I built Cosmion with AI coding agents too, but I was more involved this time. I chose the
 tech stack and directed the work, especially how it feels to use and how it looks in the
