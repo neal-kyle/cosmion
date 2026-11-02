@@ -5,10 +5,15 @@ take a while, and I may say no to some ideas.
 
 ## What to send
 
+The most useful help right now is making what's already here work better, rather than
+adding new features. For example: fixing bugs, making error messages clearer, or fixing
+problems on your operating system.
+
 **Go ahead and open an issue or pull request for:**
 
 - Bug reports. Include the command you ran, what happened, your Cosmion version
-  (`cosmion --version`) and your operating system. Leave out your API key.
+  (`cosmion --version`) and your operating system. If it only happens with one model, say
+  so. Leave out your API key.
 - Bug fixes.
 - Corrections to the docs.
 
@@ -16,11 +21,22 @@ take a while, and I may say no to some ideas.
 
 - New commands or options.
 - Any change to `--json` output or exit codes, because agents rely on them.
+- Refactors and code cleanups.
 - Anything else big.
 
-That way we can agree on it before you spend time building it. If we go ahead with a new
-feature, it gets a short spec first, using [Spec Kit](https://github.com/github/spec-kit),
-and I'll review it before any code gets written.
+That way we can agree on it before you spend time building it. A few lines on what you
+want and why is enough. If you build a feature we haven't agreed on, I may close the pull
+request, however good the code is.
+
+## Building a new feature
+
+Once we've agreed on the issue:
+
+1. Use [Spec Kit](https://github.com/github/spec-kit) to write the spec, plan and tasks
+   (`/speckit-specify`, `/speckit-plan`, `/speckit-tasks`), and open one pull request with
+   all three.
+2. I'll review them. Wait for my go-ahead before you write any tests or code.
+3. Build it on the same branch. I'll merge the pull request when it's finished.
 
 ## Using AI
 
