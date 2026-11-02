@@ -338,10 +338,12 @@ With `--json`, a failure prints one object on stdout:
 
 `retryable: true` means trying the same command again later may work.
 
-`credits` is never retryable, even when a key's daily limit resets at a time the message
-states: tell the user, then wait for that time or have the limit raised. Generations running
-at the same time may count against the limit before they finish, so if you ran several at
-once, let them finish and try again one at a time.
+`credits` is never retryable, even when a limit resets at a time the message states: tell
+the user, then wait for that time or have the limit raised. The message says which ran out:
+the account's credits, the key's own limit, or an organization or workspace budget (for
+those, the user may need to ask an admin). Generations running at the same time may count
+against a limit before they finish, so if you ran several at once, let them finish and try
+again one at a time.
 
 ## Exit codes
 
@@ -349,12 +351,12 @@ once, let them finish and try again one at a time.
 |------|---------|--------------|
 | 0 | Success | |
 | 1 | Unexpected error, or a local write failed | `internal` |
-| 2 | Invalid usage or input: flags, values, files, paths, input needed without a terminal, or OpenRouter refusing the request (400, or a 403 such as flagged content; change the request rather than retrying) | `usage` |
+| 2 | Invalid usage or input: flags, values, files, paths, input needed without a terminal, or OpenRouter refusing the request (400; 413, too large, so use fewer or smaller `--ref` images; or a 403 such as flagged content). Change the request rather than retrying | `usage` |
 | 3 | No key, or the key was rejected | `auth` |
-| 4 | Insufficient credits or the key's limit reached; the message says which | `credits` |
+| 4 | Insufficient credits, or a spending limit reached (the key's, or an organization or workspace budget); the message says which and when it resets | `credits` |
 | 5 | Unknown model or history id | `not_found` |
-| 6 | Rate limited, or refused while other requests are running; retryable, and the message says when | `rate_limited` |
-| 7 | OpenRouter, provider or network failure; retryable, except Cosmion's own 5-minute timeout | `upstream` |
+| 6 | Rate limited, or refused while other requests are running; retryable, and the message says how long to wait when OpenRouter does | `rate_limited` |
+| 7 | OpenRouter, provider or network failure; retryable (the message says how long to wait when OpenRouter does), except Cosmion's own 5-minute timeout | `upstream` |
 | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks). Not an error: the normal result is printed | |
 | 130 | Interrupted (Ctrl-C); nothing on stdout | |
 

@@ -574,20 +574,26 @@ version; check which files exist, their contents and the JSON output.
   |------|---------|--------------|-----------|
   | 0 | Success | | |
   | 1 | Unexpected error, or a local write failed | `internal` | no |
-  | 2 | Invalid usage or input (flags, values, files, paths, interactive input needed without a TTY, OpenRouter 400) | `usage` | no |
+  | 2 | Invalid usage or input (flags, values, files, paths, interactive input needed without a TTY, OpenRouter 400, 413, or a 403 refusal such as moderation) | `usage` | no |
   | 3 | No key, or key rejected (401) | `auth` | no |
-  | 4 | Insufficient credits or key limit reached (402) | `credits` | no |
+  | 4 | Insufficient credits, or a key, org or workspace spending limit reached (402, or 403 naming a limit) | `credits` | no |
   | 5 | Unknown model or ledger id (incl. OpenRouter 404) | `not_found` | no |
-  | 6 | Rate limited (429) | `rate_limited` | yes |
-  | 7 | OpenRouter, provider or network failure, or timeout (5xx, 524) | `upstream` | yes, except Cosmion's own 5-minute timeout (FR-017) |
+  | 6 | Rate limited (429), or refused while other requests are running (402 `openrouter_in_flight_budget` with `Retry-After`) | `rate_limited` | yes |
+  | 7 | OpenRouter, provider or network failure, or timeout (408, 5xx, 524) | `upstream` | yes, except Cosmion's own 5-minute timeout (FR-017) |
   | 8 | Finished, but some parts failed or were skipped (`batch` rows, `doctor` checks); not an error (FR-041) | | |
   | 130 | Interrupted (Ctrl-C); nothing on stdout, even with `--json` | | |
 
-- **FR-040a**: For exit 4, the message MUST say whether the account's credits or the key's
-  own limit ran out (from the error's `metadata.limit_source` when present) and link to
-  `https://openrouter.ai/settings/credits` for credits. For credits, it also says that
-  OpenRouter refuses generations when the balance is low, even if it covers the image's
-  price.
+- **FR-040a**: For exit 4, the message MUST say what ran out (from the error's
+  `metadata.limit_source` when present): the account's credits, the key's own limit, an
+  org (guardrail) budget or a workspace budget. For credits it links to
+  `https://openrouter.ai/settings/credits` and says that OpenRouter refuses generations
+  when the balance is low, even if it covers the image's price. For a limit it keeps
+  OpenRouter's message (figures and reset time) and says what to do: wait until
+  `metadata.resets_at` when given (not when it is `null`, a limit that never resets), and
+  raise the limit, ask the org admin, or use another key. An in-flight refusal without
+  `Retry-After` says to add credits or run fewer at once.
+- **FR-040b**: When OpenRouter sends a `Retry-After` of a number of seconds with a
+  retryable error (429, 503, an in-flight 402), the message MUST say how long to wait.
 - **FR-041**: `--json` MUST work on every command. Success: one JSON object on stdout.
   Failure: `{"error": {"code", "message", "retryable"}}` on stdout. Nothing else on stdout.
   The one exception is an interrupted command (Ctrl-C, exit 130), which prints nothing on

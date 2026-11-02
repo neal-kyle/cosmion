@@ -505,10 +505,14 @@ describe('stopping (FR-073a, FR-075, FR-078)', () => {
     expect(t.fake.imageRequests()).toHaveLength(2)
   })
 
-  test('an in-flight refusal fails only its row', async () => {
+  test('an in-flight refusal with a Retry-After fails only its row', async () => {
     const t = setup()
     t.fake.config.images.byPrompt = {
-      p2: { status: 402, errorMetadata: { limit_source: 'openrouter_in_flight_budget' } },
+      p2: {
+        status: 402,
+        errorMetadata: { limit_source: 'openrouter_in_flight_budget' },
+        headers: { 'retry-after': '10' },
+      },
     }
     const result = await t.batch([t.csv(3), '--budget', '1', '--concurrency', '1', '--json'])
     const report = result.json as Report

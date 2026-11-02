@@ -65,6 +65,7 @@ describe('HTTP status → CosmionError (docs/openrouter-api.md, Errors)', () => 
     [401, 'auth', false],
     [402, 'credits', false],
     [404, 'not_found', false],
+    [413, 'usage', false],
     [429, 'rate_limited', true],
     [500, 'upstream', true],
     [502, 'upstream', true],

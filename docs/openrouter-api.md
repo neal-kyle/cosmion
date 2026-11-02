@@ -258,18 +258,24 @@ Shows Cosmion on openrouter.ai. The CLI sends the title now and the URL once the
 
 ## Errors
 
-Shape: `{ "error": { "code": <int>, "message": "<text>" } }`.
+Shape: `{ "error": { "code": <int>, "message": "<text>", "metadata": { … } } }`;
+`metadata` is optional. Checked against OpenRouter's docs (errors and limits pages) on
+2026-11-02, through Context7, since openrouter.ai wasn't reachable from that session.
 
 | Code | Meaning | CLI handling (`specs/001-cli` FR-040) |
 |------|---------|----------------------------|
 | 400 | Invalid parameters | Exit 2 with OpenRouter's message; likely a bug or unsupported option |
 | 401 | Missing/invalid key | Exit 3 |
-| 402 | Insufficient credits or key limit | Exit 4, saying which (`error.metadata.limit_source`, e.g. `"openrouter_credits"`, seen live 2026-10-17, with a `remedy_hint`) and linking to openrouter.ai/settings/credits |
-| 402 with `limit_source` `openrouter_in_flight_budget` | Money is held for requests still running; OpenRouter documents a `Retry-After` header | Exit 6, retryable, with the wait in the message when given; the refusal was seen live 2026-11-01, the header was not checked |
-| 403 | A spent key limit, or a moderation or permission refusal | A spent limit (`error.metadata.limit_source` present, or "key limit" in the message) is exit 4, not retryable, keeping OpenRouter's message with its reset time; seen live 2026-11-01 as `Key limit exceeded (daily limit). … $2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.` Anything else (moderation, guardrail, permission) is exit 2, not retryable |
+| 402, `limit_source` absent or `openrouter_credits` | The balance can't cover the request (or a single request is too big for the in-flight budget) | Exit 4, linking to openrouter.ai/settings/credits; `openrouter_credits` seen live 2026-10-17, with a `remedy_hint` |
+| 402, `limit_source` `openrouter_in_flight_budget` | Money is held for requests still running | With a `Retry-After` header: exit 6, retryable, with the wait in the message. Without one, the docs say "a `402` without the header is not a wait-and-retry case": exit 4, not retryable, saying to add credits (which raises the in-flight budget) or run fewer at once. The refusal was seen live 2026-11-01; the header was not checked |
+| 402 or 403, any other `limit_source` | A spent limit: `openrouter_key_limit` (the key's own), `openrouter_guardrail_budget` (an org budget) or `openrouter_workspace_budget`. The docs give 403 with `Key limit exceeded` for a key limit; seen live 2026-11-01 as `Key limit exceeded (daily limit). … $2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.` | Exit 4, not retryable, keeping OpenRouter's message. The advice depends on the source (an org budget: ask the org admin), and on `metadata.resets_at`: a time to wait until, or `null` for a lifetime budget that never resets. No `Retry-After`: the wait is usually hours or days. A 403 with no `limit_source` but "key limit" in the message is treated the same |
+| 403, otherwise | A moderation flag, guardrail block or missing permission. Moderation adds `metadata.reasons`, `flagged_input`, `provider_name` and `model_slug` | Exit 2, not retryable, with OpenRouter's message |
 | 404 | Unknown model/resource | Refresh the catalog; exit 5 |
-| 429 | Rate limited | Exit 6, retryable; no automatic retry |
+| 408 | Request timed out | Exit 7, retryable |
+| 413 | Request too large (listed for `POST /images`) | Exit 2, not retryable, saying to use fewer or smaller `--ref` images (they're sent inline) |
+| 429 | Rate limited; may carry `Retry-After` (seconds) | Exit 6, retryable, with the wait in the message when given; no automatic retry |
 | 500, 502, 529 | Server or provider error | Exit 7, retryable |
+| 503 | No provider meets the routing requirements; may carry `Retry-After` | Exit 7, retryable, with the wait in the message when given |
 | 524 | Timed out | Exit 7, retryable |
 
 ## Not used

@@ -177,8 +177,9 @@ export const price = defineCommand({
   thrown is `internal`, exit 1, with a one-line message (stack trace only with
   `COSMION_DEBUG=1`, on stderr; FR-059).
 - HTTP status mapping lives in `openrouter.ts` (the table in `docs/openrouter-api.md`);
-  a `fetch` that throws (offline, DNS) is `upstream`, retryable. For 402 the message
-  names `metadata.limit_source` and the credits link (FR-040a).
+  a `fetch` that throws (offline, DNS) is `upstream`, retryable. For 402 and 403 the
+  message names `metadata.limit_source` and the remedy for it (FR-040a); a 403 without
+  a limit is a refusal (`usage`); `Retry-After` goes into the message (FR-040b).
 - **Key never printed (FR-049):** besides never formatting it, `output.ts` replaces the
   key, if it occurs, in every message before writing it. Belt and braces for an error
   body that echoes a header.
