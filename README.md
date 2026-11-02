@@ -1,5 +1,8 @@
 # Cosmion
 
+<a href="https://cosmion.kyleneal.dev"><img src="docs/images/button-website.png" width="195" height="44" alt="Cosmion website: cosmion.kyleneal.dev"></a>
+<a href="https://x.com/the_avrg_jedi"><img src="docs/images/button-x.png" width="146" height="44" alt="Follow on X"></a>
+
 Cosmion lets your coding agent generate images, using any image model on OpenRouter and
 your own API key. You can run it yourself from a terminal too. You can check a price before
 you spend, and Cosmion records what every image cost.
