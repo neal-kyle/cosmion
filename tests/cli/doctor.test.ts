@@ -136,6 +136,43 @@ describe('doctor (FR-095, FR-096)', () => {
     expect(result.check('key_limit')).toMatchObject({ status: 'warn', fix: expect.any(String) })
   })
 
+  test('an org budget with little left warns, naming the budget and who can raise it', async () => {
+    const { fake, doctor } = setup()
+    const record = fake.config.keys[VALID_KEY]
+    if (!record) throw new Error('no key record')
+    record.effective_budget = {
+      scope: 'member',
+      limit_usd: 50,
+      spend_usd: 48,
+      remaining_usd: 2,
+      resets_at: '2026-11-09T00:00:00.000Z',
+    }
+    const result = await doctor()
+    expect(result.exitCode).toBe(0)
+    const check = result.check('key_limit')
+    expect(check).toMatchObject({ status: 'warn' })
+    expect(check.message).toContain('$2.00 of the member budget')
+    expect(check.message).toContain('2026-11-09T00:00:00.000Z')
+    expect(check.fix).toMatch(/admin/)
+  })
+
+  test('a budget with plenty left is ok even with no key limit', async () => {
+    const { fake, doctor } = setup()
+    const record = fake.config.keys[VALID_KEY]
+    if (!record) throw new Error('no key record')
+    record.limit = null
+    record.limit_remaining = null
+    record.effective_budget = {
+      scope: 'workspace',
+      limit_usd: 100,
+      remaining_usd: 90,
+      resets_at: null,
+    }
+    const check = (await doctor()).check('key_limit')
+    expect(check.status).toBe('ok')
+    expect(check.message).toContain('workspace budget')
+  })
+
   test('a key without a limit is ok', async () => {
     const { fake, doctor } = setup()
     const record = fake.config.keys[VALID_KEY]

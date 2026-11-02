@@ -53,6 +53,17 @@ export interface OpenRouterOptions {
   signal?: AbortSignal
 }
 
+/** An org, workspace or key budget from `GET /key`'s `budgets` (docs/openrouter-api.md). */
+const budgetSchema = z.object({
+  /** Which layer: `member`, `workspace`, `key_limit` (the key's own limit) and others. */
+  scope: z.string(),
+  limit_usd: z.number(),
+  remaining_usd: z.number(),
+  /** `null` for a budget that never resets. */
+  resets_at: z.string().nullable().optional(),
+})
+export type Budget = z.infer<typeof budgetSchema>
+
 const keyInfoSchema = z.object({
   data: z.object({
     label: z.string().nullable(),
@@ -60,9 +71,27 @@ const keyInfoSchema = z.object({
     limit: z.number().nullable(),
     limit_remaining: z.number().nullable(),
     usage: z.number(),
+    /** The budget that blocks first. Read leniently: an odd one mustn't fail the key check. */
+    effective_budget: budgetSchema.nullable().optional().catch(null),
   }),
 })
 export type KeyInfo = z.infer<typeof keyInfoSchema>['data']
+
+/**
+ * The budget that blocks first when it isn't the key's own limit (which `limit` and
+ * `limit_remaining` already give), else null. `resets_at` is null when it never resets or
+ * OpenRouter didn't say.
+ */
+export function otherBudget(info: KeyInfo): (Budget & { resets_at: string | null }) | null {
+  const budget = info.effective_budget
+  if (!budget || budget.scope === 'key_limit') return null
+  return {
+    scope: budget.scope,
+    limit_usd: budget.limit_usd,
+    remaining_usd: budget.remaining_usd,
+    resets_at: budget.resets_at ?? null,
+  }
+}
 
 const creditsSchema = z.object({
   data: z.object({ total_credits: z.number(), total_usage: z.number() }),
@@ -268,6 +297,8 @@ function statusError(status: number, body: unknown, headers: Headers): CosmionEr
   const resetsAt = metadata?.resets_at
   const retryAfter = headers.get('retry-after')
   const wait = retryAfter === null ? '' : ` Try again ${waitText(retryAfter)}.`
+  const retryAfterSeconds =
+    retryAfter !== null && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null
 
   switch (status) {
     case 400:
@@ -278,7 +309,9 @@ function statusError(status: number, body: unknown, headers: Headers): CosmionEr
       if (limitSource === 'openrouter_in_flight_budget') {
         // OpenRouter's docs: "A 402 without the header is not a wait-and-retry case."
         if (retryAfter !== null) {
-          return new CosmionError('rate_limited', inFlightMessage(retryAfter))
+          return new CosmionError('rate_limited', inFlightMessage(retryAfter), {
+            retryAfterSeconds,
+          })
         }
         return new CosmionError(
           'credits',
@@ -309,11 +342,13 @@ function statusError(status: number, body: unknown, headers: Headers): CosmionEr
       return new CosmionError(
         'rate_limited',
         `${sentence(`OpenRouter is rate limiting requests${because}`)}${wait}`,
+        { retryAfterSeconds },
       )
     default:
       return new CosmionError(
         'upstream',
         `${sentence(`OpenRouter failed with status ${status}${because}`)}${wait}`,
+        { retryAfterSeconds },
       )
   }
 }

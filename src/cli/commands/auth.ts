@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { CosmionError } from '../../core/errors.js'
 import { toNano, toUsd } from '../../core/money.js'
-import { createOpenRouterClient, type KeyInfo } from '../../core/openrouter.js'
+import { createOpenRouterClient, type KeyInfo, otherBudget } from '../../core/openrouter.js'
 import type { Context } from '../context.js'
 import { defineCommand } from '../define.js'
 import { readHidden } from '../hidden-input.js'
@@ -18,6 +18,15 @@ const statusSchema = z.strictObject({
   limit_remaining_usd: z.number().nullable(),
   usage_usd: z.number().nullable(),
   balance_usd: z.number().nullable(),
+  /** An org or workspace budget that blocks before the key's own limit, from `GET /key`. */
+  budget: z
+    .strictObject({
+      scope: z.string(),
+      limit_usd: z.number(),
+      remaining_usd: z.number(),
+      resets_at: z.string().nullable(),
+    })
+    .nullable(),
 })
 type Status = z.infer<typeof statusSchema>
 
@@ -28,6 +37,7 @@ const unknown = {
   limit_remaining_usd: null,
   usage_usd: null,
   balance_usd: null,
+  budget: null,
 }
 
 function client(ctx: Context) {
@@ -67,6 +77,7 @@ const status = defineCommand({
       limit_remaining_usd: key.limit_remaining,
       usage_usd: key.usage,
       balance_usd: credits && toUsd(toNano(credits.total_credits) - toNano(credits.total_usage)),
+      budget: otherBudget(key),
     }
     return { data }
   },
@@ -167,5 +178,12 @@ function statusText(data: Status): string {
     `Limit:    ${limit}`,
     `Used:     ${usd(data.usage_usd)}`,
     `Balance:  ${usd(data.balance_usd)}`,
+    ...(data.budget ? [`Budget:   ${budgetText(data.budget)}`] : []),
   ].join('\n')
+}
+
+/** `$10.00 of $50.00 left (member, resets 2026-11-09T00:00:00.000Z)` */
+function budgetText(budget: NonNullable<Status['budget']>): string {
+  const resets = budget.resets_at === null ? '' : `, resets ${budget.resets_at}`
+  return `${formatUsd(budget.remaining_usd)} of ${formatUsd(budget.limit_usd)} left (${budget.scope}${resets})`
 }

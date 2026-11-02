@@ -551,7 +551,12 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     const result = await gen(['p', '-m', SEEDREAM, '--json'])
     expect(result.exitCode).toBe(6)
     expect(result.json).toEqual({
-      error: { code: 'rate_limited', message: expect.any(String), retryable: true },
+      error: {
+        code: 'rate_limited',
+        message: expect.any(String),
+        retryable: true,
+        retry_after_seconds: 30,
+      },
     })
     const { message } = (result.json as { error: { message: string } }).error
     expect(message).toContain('openrouter_in_flight_budget')
@@ -624,6 +629,17 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     expect(message).not.toMatch(/raise the key's limit/)
   })
 
+  test("a Retry-After that isn't a number of seconds adds no retry_after_seconds", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 429
+    fake.config.images.headers = { 'retry-after': 'Wed, 21 Oct 2026 07:28:00 GMT' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(6)
+    expect(result.json).toEqual({
+      error: { code: 'rate_limited', message: expect.any(String), retryable: true },
+    })
+  })
+
   test('a 413 says the request is too large and points at the references', async () => {
     const { fake, gen } = setup()
     fake.config.images.status = 413
@@ -645,7 +661,12 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     const result = await gen(['p', '-m', SEEDREAM, '--json'])
     expect(result.exitCode).toBe(exit)
     expect(result.json).toEqual({
-      error: { code, message: expect.stringContaining('45 seconds'), retryable: true },
+      error: {
+        code,
+        message: expect.stringContaining('45 seconds'),
+        retryable: true,
+        retry_after_seconds: 45,
+      },
     })
   })
 

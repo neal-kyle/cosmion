@@ -519,7 +519,12 @@ describe('stopping (FR-073a, FR-075, FR-078)', () => {
     expect(result.exitCode).toBe(8)
     expect(statuses(report)).toEqual(['ok', 'failed', 'ok'])
     expect(report.stopped).toBeNull()
-    expect(report.rows[1]?.error?.code).toBe('rate_limited')
+    expect(report.rows[1]?.error).toEqual({
+      code: 'rate_limited',
+      message: expect.stringContaining('10 seconds'),
+      retry_after_seconds: 10,
+    })
+    expect(report.rows[0]?.error).toBeNull()
   })
 
   test('a refused 403 fails only its row', async () => {

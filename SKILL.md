@@ -200,6 +200,8 @@ rows from starting.
 
 - `budget_usd` is `null` with `--no-budget`.
 - `status` is `ok`, `failed`, `skipped_budget`, `skipped_resumed` or `not_run`.
+- A failed row's `error` is `{"code", "message"}`, plus `retry_after_seconds` when
+  OpenRouter said how long to wait.
 - `stopped` is `null`, or `{"code", "message"}` when the batch stopped early. Code
   `unknown_cost` means a row's cost couldn't be known, so the budget couldn't be tracked;
   the message gives the `--no-budget --resume` command to continue, which is the user's
@@ -258,7 +260,10 @@ Shows which key is in use and what it has left.
 
 Options: `--json`.
 
-`{"source": "env|file|none", "valid", "label", "limit_usd", "limit_remaining_usd", "usage_usd", "balance_usd"}`. A rejected key is `"valid": false` with exit 0.
+`{"source": "env|file|none", "valid", "label", "limit_usd", "limit_remaining_usd", "usage_usd", "balance_usd", "budget"}`. A rejected key is `"valid": false` with exit 0.
+`budget` is `null`, or `{"scope", "limit_usd", "remaining_usd", "resets_at"}` when an
+organization or workspace budget will block the key before its own limit does
+(`resets_at` is `null` if it never resets).
 The figures are OpenRouter's, read fresh each time, and can lag a generation that just finished.
 
 ### `cosmion auth logout`
@@ -275,7 +280,8 @@ the folders, the history file and whether an installed skill is out of date.
 Options: `--json`.
 
 `{"checks": [{"name", "status": "ok|warn|fail", "message", "fix"}]}`. `fix` says what to
-do, and is `null` when the check passed. Exit 0 when nothing fails (warnings are fine),
+do, and is `null` when the check passed. The `key_limit` check covers whichever has less
+left: the key's own limit, or an organization or workspace budget over it. Exit 0 when nothing fails (warnings are fine),
 8 otherwise.
 
 ### `cosmion skill install`
@@ -336,7 +342,8 @@ With `--json`, a failure prints one object on stdout:
 { "error": { "code": "rate_limited", "message": "…", "retryable": true } }
 ```
 
-`retryable: true` means trying the same command again later may work.
+`retryable: true` means trying the same command again later may work. When OpenRouter
+says how long to wait, the error also has `retry_after_seconds`: wait that long first.
 
 `credits` is never retryable, even when a limit resets at a time the message states: tell
 the user, then wait for that time or have the limit raised. The message says which ran out:

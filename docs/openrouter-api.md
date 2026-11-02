@@ -212,6 +212,16 @@ usage fields and more; `label` defaults to a masked form of the key
 Useful for: checking a key works (`cosmion auth`), and showing remaining budget when the key
 has a limit.
 
+**Budgets above the key.** Per OpenRouter's limits docs (read 2026-11-02), `budgets` lists
+every budget that applies (org member, workspace, the key's own limit, …), each with
+`scope`, `limit_usd`, `spend_usd`, `remaining_usd`, `reset_interval` and `resets_at`
+(ISO 8601, or `null` for a lifetime budget). `effective_budget` is the one that blocks
+first, in the same shape; its `scope` is `key_limit` when that's the key's own limit.
+`limit` and `limit_remaining` describe only the key's own limit. `auth status` shows
+`effective_budget` as `budget` and `doctor` checks it, unless it is the key's own limit.
+Cosmion reads it leniently: an `effective_budget` of another shape is ignored. Not yet
+seen live with a real org or workspace budget.
+
 **The figures can lag a generation that just finished.** Live, 2026-11-01: about 9 seconds
 after two generations finished, `limit_remaining` hadn't moved, though the response is
 `cache-control: private, no-store`. Minutes later it matched the ledger exactly. A daily

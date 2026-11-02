@@ -185,7 +185,14 @@ function report(ctx: Context, error: unknown, json: boolean): number {
     return exitCodes.interrupted.code
   }
   if (error instanceof CosmionError) {
-    return printError(ctx, json, error.code, error.message, error.retryable)
+    return printError(
+      ctx,
+      json,
+      error.code,
+      error.message,
+      error.retryable,
+      error.retryAfterSeconds,
+    )
   }
 
   const message = error instanceof Error ? error.message : String(error)
@@ -209,8 +216,10 @@ function printError(
   code: ErrorCode,
   message: string,
   retryable: boolean,
+  retryAfterSeconds: number | null = null,
 ): number {
-  if (json) printJson(ctx, { error: { code, message, retryable } })
+  const wait = retryAfterSeconds === null ? {} : { retry_after_seconds: retryAfterSeconds }
+  if (json) printJson(ctx, { error: { code, message, retryable, ...wait } })
   else if (fancy(ctx)) ctx.stderr.write(styledError(message))
   else ctx.stderr.write(`error: ${message}\n`)
   return exitCodes[code].code
