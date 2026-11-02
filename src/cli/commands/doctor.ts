@@ -3,7 +3,7 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { CosmionError } from '../../core/errors.js'
-import { createOpenRouterClient, type KeyInfo } from '../../core/openrouter.js'
+import { createOpenRouterClient, type KeyInfo, otherBudget } from '../../core/openrouter.js'
 import { loadCatalog } from '../catalog-cache.js'
 import type { Context } from '../context.js'
 import { defineCommand } from '../define.js'
@@ -40,7 +40,7 @@ const fail = (name: string, message: string, fix: string): Check => ({
 })
 
 const MIN_NODE = { major: 22, minor: 12 }
-/** Under this share of the key's limit left, warn. */
+/** Under this share of the key's limit (or a budget) left, warn. */
 const LOW_LIMIT_SHARE = 0.1
 /** The longest check name, `settings_file`. */
 const NAME_WIDTH = 13
@@ -186,11 +186,27 @@ async function checkKey(ctx: Context): Promise<Check[]> {
 }
 
 function checkLimit(info: KeyInfo): Check {
-  if (info.limit === null || info.limit_remaining === null) {
-    return ok('key_limit', 'The key has no spending limit.')
+  // An org or workspace budget can block before the key's own limit; check whichever has less left.
+  const budget = otherBudget(info)
+  const keyLimit =
+    info.limit === null || info.limit_remaining === null
+      ? null
+      : { limit: info.limit, remaining: info.limit_remaining }
+  if (budget && (keyLimit === null || budget.remaining_usd < keyLimit.remaining)) {
+    const resets = budget.resets_at === null ? '' : ` It resets ${budget.resets_at}.`
+    const left = `${formatUsd(budget.remaining_usd)} of the ${budget.scope} budget's ${formatUsd(budget.limit_usd)} is left.${resets}`
+    if (isLow(budget.remaining_usd, budget.limit_usd)) {
+      return warn(
+        'key_limit',
+        left,
+        'An org or workspace admin sets this budget on OpenRouter; ask them to raise it if you need more.',
+      )
+    }
+    return ok('key_limit', left)
   }
-  const left = `${formatUsd(info.limit_remaining)} of the key's ${formatUsd(info.limit)} limit is left.`
-  if (info.limit <= 0 || info.limit_remaining / info.limit < LOW_LIMIT_SHARE) {
+  if (keyLimit === null) return ok('key_limit', 'The key has no spending limit.')
+  const left = `${formatUsd(keyLimit.remaining)} of the key's ${formatUsd(keyLimit.limit)} limit is left.`
+  if (isLow(keyLimit.remaining, keyLimit.limit)) {
     return warn(
       'key_limit',
       left,
@@ -198,6 +214,10 @@ function checkLimit(info: KeyInfo): Check {
     )
   }
   return ok('key_limit', left)
+}
+
+function isLow(remaining: number, limit: number): boolean {
+  return limit <= 0 || remaining / limit < LOW_LIMIT_SHARE
 }
 
 /** Only the owner may read the saved key (FR-047). Windows keeps it in the user's profile. */

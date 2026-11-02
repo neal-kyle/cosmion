@@ -36,7 +36,14 @@ const reportSchema = z.strictObject({
       paths: z.array(z.string()),
       cost_usd: z.number().nullable(),
       price: priceSchema.nullable(),
-      error: z.strictObject({ code: z.enum(ERROR_CODES), message: z.string() }).nullable(),
+      error: z
+        .strictObject({
+          code: z.enum(ERROR_CODES),
+          message: z.string(),
+          /** Only when OpenRouter said how long to wait (`Retry-After`). */
+          retry_after_seconds: z.number().optional(),
+        })
+        .nullable(),
     }),
   ),
 })
@@ -433,7 +440,11 @@ async function runRow(
         ? `${rowMark('error', '✗', row)}  ${code(error.message)}\n`
         : `Row ${row} failed: ${error.message}\n`,
     )
-    const failure = { code: error.code, message: error.message }
+    const failure = {
+      code: error.code,
+      message: error.message,
+      ...(error.retryAfterSeconds === null ? {} : { retry_after_seconds: error.retryAfterSeconds }),
+    }
     if (error instanceof ChargedError) {
       const { entry } = error
       ran.set(row, {

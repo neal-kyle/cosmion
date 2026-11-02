@@ -19,11 +19,18 @@ export type ErrorCode = (typeof ERROR_CODES)[number]
 export class CosmionError extends Error {
   readonly code: ErrorCode
   readonly retryable: boolean
+  /** How long OpenRouter said to wait before retrying (its `Retry-After`), when it did. */
+  readonly retryAfterSeconds: number | null
 
-  constructor(code: ErrorCode, message: string, options: { retryable?: boolean } = {}) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    options: { retryable?: boolean; retryAfterSeconds?: number | null } = {},
+  ) {
     super(message)
     this.name = 'CosmionError'
     this.code = code
     this.retryable = options.retryable ?? (code === 'rate_limited' || code === 'upstream')
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null
   }
 }

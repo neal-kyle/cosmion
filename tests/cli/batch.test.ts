@@ -492,6 +492,53 @@ describe('stopping (FR-073a, FR-075, FR-078)', () => {
     expect(statuses(noBudget.json as Report)).toEqual(['skipped_resumed', 'ok', 'ok'])
   })
 
+  test("a 403 for the key's limit stops new rows like any credits error", async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: { status: 403, errorMessage: 'Key limit exceeded (daily limit).' },
+    }
+    const result = await t.batch([t.csv(4), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(4)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'not_run', 'not_run'])
+    expect(report.stopped?.code).toBe('credits')
+    expect(t.fake.imageRequests()).toHaveLength(2)
+  })
+
+  test('an in-flight refusal with a Retry-After fails only its row', async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: {
+        status: 402,
+        errorMetadata: { limit_source: 'openrouter_in_flight_budget' },
+        headers: { 'retry-after': '10' },
+      },
+    }
+    const result = await t.batch([t.csv(3), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(8)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'ok'])
+    expect(report.stopped).toBeNull()
+    expect(report.rows[1]?.error).toEqual({
+      code: 'rate_limited',
+      message: expect.stringContaining('10 seconds'),
+      retry_after_seconds: 10,
+    })
+    expect(report.rows[0]?.error).toBeNull()
+  })
+
+  test('a refused 403 fails only its row', async () => {
+    const t = setup()
+    t.fake.config.images.byPrompt = {
+      p2: { status: 403, errorMessage: 'Your input was flagged' },
+    }
+    const result = await t.batch([t.csv(3), '--budget', '1', '--concurrency', '1', '--json'])
+    const report = result.json as Report
+    expect(result.exitCode).toBe(8)
+    expect(statuses(report)).toEqual(['ok', 'failed', 'ok'])
+    expect(report.rows[1]?.error?.code).toBe('usage')
+  })
+
   for (const [status, code, exitCode] of [
     [402, 'credits', 4],
     [401, 'auth', 3],

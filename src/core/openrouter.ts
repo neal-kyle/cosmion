@@ -53,6 +53,17 @@ export interface OpenRouterOptions {
   signal?: AbortSignal
 }
 
+/** An org, workspace or key budget from `GET /key`'s `budgets` (docs/openrouter-api.md). */
+const budgetSchema = z.object({
+  /** Which layer: `member`, `workspace`, `key_limit` (the key's own limit) and others. */
+  scope: z.string(),
+  limit_usd: z.number(),
+  remaining_usd: z.number(),
+  /** `null` for a budget that never resets. */
+  resets_at: z.string().nullable().optional(),
+})
+export type Budget = z.infer<typeof budgetSchema>
+
 const keyInfoSchema = z.object({
   data: z.object({
     label: z.string().nullable(),
@@ -60,9 +71,27 @@ const keyInfoSchema = z.object({
     limit: z.number().nullable(),
     limit_remaining: z.number().nullable(),
     usage: z.number(),
+    /** The budget that blocks first. Read leniently: an odd one mustn't fail the key check. */
+    effective_budget: budgetSchema.nullable().optional().catch(null),
   }),
 })
 export type KeyInfo = z.infer<typeof keyInfoSchema>['data']
+
+/**
+ * The budget that blocks first when it isn't the key's own limit (which `limit` and
+ * `limit_remaining` already give), else null. `resets_at` is null when it never resets or
+ * OpenRouter didn't say.
+ */
+export function otherBudget(info: KeyInfo): (Budget & { resets_at: string | null }) | null {
+  const budget = info.effective_budget
+  if (!budget || budget.scope === 'key_limit') return null
+  return {
+    scope: budget.scope,
+    limit_usd: budget.limit_usd,
+    remaining_usd: budget.remaining_usd,
+    resets_at: budget.resets_at ?? null,
+  }
+}
 
 const creditsSchema = z.object({
   data: z.object({ total_credits: z.number(), total_usage: z.number() }),
@@ -151,11 +180,10 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
 
   function check<T>(
     route: string,
-    status: number,
-    body: unknown,
+    { status, body, headers }: { status: number; body: unknown; headers: Headers },
     schema: z.ZodType<T, unknown>,
   ): T {
-    if (status < 200 || status >= 300) throw statusError(status, body)
+    if (status < 200 || status >= 300) throw statusError(status, body, headers)
     const result = schema.safeParse(body)
     if (!result.success) {
       throw new CosmionError(
@@ -167,8 +195,7 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
   }
 
   async function get<T>(path: string, schema: z.ZodType<T>, key?: string): Promise<T> {
-    const { status, body } = await send(path, { key })
-    return check(`GET ${path}`, status, body, schema)
+    return check(`GET ${path}`, await send(path, { key }), schema)
   }
 
   return {
@@ -184,10 +211,10 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
       return (await get('/key', keyInfoSchema, key)).data
     },
     async getCredits(key) {
-      const { status, body } = await send('/credits', { key })
+      const response = await send('/credits', { key })
       // The docs list 403 for keys that aren't management keys; live, ordinary keys get 200.
-      if (status === 403) return null
-      return check('GET /credits', status, body, creditsSchema).data
+      if (response.status === 403) return null
+      return check('GET /credits', response, creditsSchema).data
     },
     async generateImages(key, request) {
       // A plain setTimeout rather than AbortSignal.timeout(), which fake timers can't drive.
@@ -226,12 +253,7 @@ export function createOpenRouterClient(options: OpenRouterOptions): OpenRouter {
         options.signal?.removeEventListener('abort', onAbort)
       }
 
-      const { data, usage } = check(
-        'POST /images',
-        response.status,
-        response.body,
-        imagesResponseSchema,
-      )
+      const { data, usage } = check('POST /images', response, imagesResponseSchema)
       const cost = z.object({ cost: z.number() }).safeParse(usage)
       const tokens = tokensSchema.safeParse(usage)
       return {
@@ -259,15 +281,24 @@ function parseJson(text: string): unknown {
 const errorBodySchema = z.object({
   error: z.object({
     message: z.string().optional(),
-    metadata: z.object({ limit_source: z.string().optional() }).optional(),
+    metadata: z
+      .object({ limit_source: z.string().optional(), resets_at: z.unknown().optional() })
+      .optional(),
   }),
 })
 
 /** The HTTP status table of docs/openrouter-api.md → Errors. */
-function statusError(status: number, body: unknown): CosmionError {
+function statusError(status: number, body: unknown, headers: Headers): CosmionError {
   const parsed = errorBodySchema.safeParse(body)
   const detail = parsed.success ? parsed.data.error.message : undefined
   const because = detail ? `: ${detail}` : ''
+  const metadata = parsed.success ? parsed.data.error.metadata : undefined
+  const limitSource = metadata?.limit_source
+  const resetsAt = metadata?.resets_at
+  const retryAfter = headers.get('retry-after')
+  const wait = retryAfter === null ? '' : ` Try again ${waitText(retryAfter)}.`
+  const retryAfterSeconds =
+    retryAfter !== null && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null
 
   switch (status) {
     case 400:
@@ -275,27 +306,103 @@ function statusError(status: number, body: unknown): CosmionError {
     case 401:
       return new CosmionError('auth', `OpenRouter rejected the API key${because}`)
     case 402:
-      return new CosmionError(
-        'credits',
-        outOfCreditsMessage(parsed.success ? parsed.data.error.metadata?.limit_source : undefined),
-      )
+      if (limitSource === 'openrouter_in_flight_budget') {
+        // OpenRouter's docs: "A 402 without the header is not a wait-and-retry case."
+        if (retryAfter !== null) {
+          return new CosmionError('rate_limited', inFlightMessage(retryAfter), {
+            retryAfterSeconds,
+          })
+        }
+        return new CosmionError(
+          'credits',
+          'OpenRouter refused this to cover money held for requests still running ' +
+            "(openrouter_in_flight_budget), and didn't say when to try again. Add credits at " +
+            `${CREDITS_URL}, which raises how much can be held, or run fewer generations at once.`,
+        )
+      }
+      if (limitSource === undefined || limitSource === 'openrouter_credits') {
+        return new CosmionError('credits', outOfCreditsMessage(limitSource))
+      }
+      return new CosmionError('credits', spentLimitMessage(limitSource, because, resetsAt))
+    case 403:
+      // 403 also means a moderation, guardrail or permission refusal: retrying won't change it.
+      if (limitSource === undefined && !/key limit/i.test(detail ?? '')) {
+        return new CosmionError('usage', `OpenRouter refused the request${because}`)
+      }
+      return new CosmionError('credits', spentLimitMessage(limitSource, because, resetsAt))
     case 404:
       return new CosmionError('not_found', `OpenRouter has no such model or resource${because}`)
+    case 413:
+      return new CosmionError(
+        'usage',
+        `${sentence(`OpenRouter says the request is too large${because}`)} ` +
+          'Use fewer or smaller reference images (--ref).',
+      )
     case 429:
-      return new CosmionError('rate_limited', `OpenRouter is rate limiting requests${because}`)
+      return new CosmionError(
+        'rate_limited',
+        `${sentence(`OpenRouter is rate limiting requests${because}`)}${wait}`,
+        { retryAfterSeconds },
+      )
     default:
-      return new CosmionError('upstream', `OpenRouter failed with status ${status}${because}`)
+      return new CosmionError(
+        'upstream',
+        `${sentence(`OpenRouter failed with status ${status}${because}`)}${wait}`,
+        { retryAfterSeconds },
+      )
   }
 }
 
-/** FR-040a: says which limit ran out, and what to do about it. */
+/** `Retry-After` is a number of seconds; anything else is shown as "shortly". */
+function waitText(retryAfter: string): string {
+  if (!/^\d+$/.test(retryAfter)) return 'shortly'
+  return `in ${retryAfter} ${retryAfter === '1' ? 'second' : 'seconds'}`
+}
+
+function sentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`
+}
+
+/** Not a spent limit: OpenRouter is holding money for requests still running, and says when to retry. */
+function inFlightMessage(retryAfter: string): string {
+  return (
+    'OpenRouter is holding money for requests still running, so it refused this one ' +
+    `(openrouter_in_flight_budget). Try again ${waitText(retryAfter)}, or run fewer at once.`
+  )
+}
+
+/** FR-040a: the account's balance ran out. */
 function outOfCreditsMessage(limitSource: string | undefined): string {
-  if (limitSource === undefined || limitSource === 'openrouter_credits') {
-    const source = limitSource ? ` (${limitSource})` : ''
-    return (
-      `OpenRouter says you are out of credits${source}. Add credits at ${CREDITS_URL}. ` +
-      "OpenRouter also refuses generations when the balance is low, even if it covers the image's price."
-    )
-  }
-  return `The key's own spending limit has been reached (${limitSource}). Raise the key's limit on OpenRouter, or use another key.`
+  const source = limitSource ? ` (${limitSource})` : ''
+  return (
+    `OpenRouter says you are out of credits${source}. Add credits at ${CREDITS_URL}. ` +
+    "OpenRouter also refuses generations when the balance is low, even if it covers the image's price."
+  )
+}
+
+/**
+ * FR-040a: a spending limit ran out: the key's own, an org (guardrail) budget or a workspace
+ * budget. OpenRouter's message, kept in `because`, gives the figures and the reset time;
+ * `resets_at` is null for a limit that never resets.
+ */
+function spentLimitMessage(
+  limitSource: string | undefined,
+  because: string,
+  resetsAt: unknown,
+): string {
+  const [what, ...remedies] =
+    limitSource === 'openrouter_guardrail_budget'
+      ? ['An organization budget that covers this key', 'ask your org admin to raise it']
+      : limitSource === 'openrouter_workspace_budget'
+        ? ["The workspace's budget", 'raise it on OpenRouter (or ask its admin)', 'use another key']
+        : limitSource === undefined || limitSource === 'openrouter_key_limit'
+          ? ["This key's spending limit", "raise the key's limit on OpenRouter", 'use another key']
+          : ['A spending limit on OpenRouter', 'raise it on OpenRouter', 'use another key']
+  // A string is when it resets; null means it never does; absent means OpenRouter didn't say.
+  if (typeof resetsAt === 'string') remedies.unshift(`wait until ${resetsAt}`)
+  else if (resetsAt === undefined) remedies.unshift('wait for it to reset if it does')
+  const last = remedies.pop()
+  const next = remedies.length > 0 ? `${remedies.join(', ')}, or ${last}` : `${last}`
+  const source = limitSource ? ` (${limitSource})` : ''
+  return `${sentence(`${what} has been reached${source}${because}`)} ${next[0]?.toUpperCase()}${next.slice(1)}.`
 }

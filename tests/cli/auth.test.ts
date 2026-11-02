@@ -175,6 +175,65 @@ describe('auth on a terminal (behavior only)', () => {
 })
 
 describe('auth status (FR-048)', () => {
+  const ORG_BUDGET = {
+    scope: 'member',
+    guardrail_id: 'g-1',
+    budget_id: null,
+    limit_usd: 50,
+    spend_usd: 40,
+    remaining_usd: 10,
+    reset_interval: 'weekly',
+    resets_at: '2026-11-09T00:00:00.000Z',
+    include_byok: false,
+  }
+
+  test('an org or workspace budget that blocks first is shown as budget', async () => {
+    const { fake, cli } = setup()
+    const record = fake.config.keys[VALID_KEY]
+    if (!record) throw new Error('no key record')
+    record.budgets = [ORG_BUDGET]
+    record.effective_budget = ORG_BUDGET
+    const result = await cli(['auth', 'status', '--json'], {
+      env: { OPENROUTER_API_KEY: VALID_KEY },
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.json).toMatchObject({
+      budget: {
+        scope: 'member',
+        limit_usd: 50,
+        remaining_usd: 10,
+        resets_at: '2026-11-09T00:00:00.000Z',
+      },
+    })
+    const text = await cli(['auth', 'status'], { env: { OPENROUTER_API_KEY: VALID_KEY } })
+    expect(text.stdout).toMatch(
+      /Budget: +\$10\.00 of \$50\.00 left \(member, resets 2026-11-09T00:00:00\.000Z\)/,
+    )
+  })
+
+  test("the key's own limit as effective_budget isn't repeated as budget", async () => {
+    const { fake, cli } = setup()
+    const record = fake.config.keys[VALID_KEY]
+    if (!record) throw new Error('no key record')
+    record.effective_budget = { ...ORG_BUDGET, scope: 'key_limit' }
+    const result = await cli(['auth', 'status', '--json'], {
+      env: { OPENROUTER_API_KEY: VALID_KEY },
+    })
+    expect(result.json).toMatchObject({ budget: null })
+  })
+
+  test('an effective_budget of an unexpected shape is ignored, not a failure', async () => {
+    const { fake, cli } = setup()
+    const record = fake.config.keys[VALID_KEY]
+    if (!record) throw new Error('no key record')
+    record.effective_budget = { scope: 3 }
+    const result = await cli(['auth', 'status', '--json'], {
+      env: { OPENROUTER_API_KEY: VALID_KEY },
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.json).toMatchObject({ valid: true, budget: null })
+  })
+
   const nothing = {
     valid: null,
     label: null,
@@ -182,6 +241,7 @@ describe('auth status (FR-048)', () => {
     limit_remaining_usd: null,
     usage_usd: null,
     balance_usd: null,
+    budget: null,
   }
 
   test('no key: source none, the rest null, exit 0, nothing fetched', async () => {
@@ -206,6 +266,7 @@ describe('auth status (FR-048)', () => {
       limit_remaining_usd: 74.5,
       usage_usd: 25.5,
       balance_usd: 74.75,
+      budget: null,
     })
     expect(fake.requests.map((r) => `${r.method} ${r.path}`).sort()).toEqual([
       'GET /credits',

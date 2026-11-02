@@ -67,7 +67,7 @@ src/cli    interface: commands, output, ledger, caches, settings location, savin
 ```text
 src/
 ├── core/
-│   ├── errors.ts          CosmionError { code, message, retryable } and the error codes
+│   ├── errors.ts          CosmionError { code, message, retryable, retryAfterSeconds } and the error codes
 │   ├── money.ts           USD ↔ integer nano-dollars; sums and comparisons
 │   ├── ids.ts             8-char lowercase id generator
 │   ├── openrouter.ts      HTTP client: images, image models, endpoints, key, credits;
@@ -173,12 +173,14 @@ export const price = defineCommand({
 - `core` throws `CosmionError` with a code from FR-040 (`usage`, `auth`, `credits`,
   `not_found`, `rate_limited`, `upstream`) and its `retryable` flag (the timeout is the
   one `upstream` error that isn't retryable); `run.ts` maps it through
-  `exit-codes.ts` and prints `{"error": {"code", "message", "retryable"}}`. Anything else
+  `exit-codes.ts` and prints `{"error": {"code", "message", "retryable"}}`, plus
+  `retry_after_seconds` when the error has one (FR-040b). Anything else
   thrown is `internal`, exit 1, with a one-line message (stack trace only with
   `COSMION_DEBUG=1`, on stderr; FR-059).
 - HTTP status mapping lives in `openrouter.ts` (the table in `docs/openrouter-api.md`);
-  a `fetch` that throws (offline, DNS) is `upstream`, retryable. For 402 the message
-  names `metadata.limit_source` and the credits link (FR-040a).
+  a `fetch` that throws (offline, DNS) is `upstream`, retryable. For 402 and 403 the
+  message names `metadata.limit_source` and the remedy for it (FR-040a); a 403 without
+  a limit is a refusal (`usage`); `Retry-After` goes into the message (FR-040b).
 - **Key never printed (FR-049):** besides never formatting it, `output.ts` replaces the
   key, if it occurs, in every message before writing it. Belt and braces for an error
   body that echoes a header.

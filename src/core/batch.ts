@@ -17,7 +17,7 @@ export interface RowResult {
   charged: boolean
   /** The actual cost; null when OpenRouter didn't say. */
   costUsd: number | null
-  error: { code: ErrorCode; message: string } | null
+  error: { code: ErrorCode; message: string; retry_after_seconds?: number } | null
 }
 
 export type RowStatus = 'ok' | 'failed' | 'skipped_budget' | 'not_run'

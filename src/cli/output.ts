@@ -10,6 +10,8 @@ export const errorOutputSchema = z.strictObject({
     code: z.enum(ERROR_CODES),
     message: z.string(),
     retryable: z.boolean(),
+    /** Only when OpenRouter said how long to wait (`Retry-After`). */
+    retry_after_seconds: z.number().optional(),
   }),
 })
 

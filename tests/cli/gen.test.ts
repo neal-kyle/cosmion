@@ -463,12 +463,17 @@ describe('nothing is sent when a pre-check fails (FR-012)', () => {
   })
 })
 
+const KEY_LIMIT_MESSAGE =
+  'Key limit exceeded (daily limit). Manage it using https://openrouter.ai/settings/keys ' +
+  '$2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z.'
+
 describe('failures from OpenRouter (FR-016, FR-040)', () => {
   test.each([
     [400, 2, 'usage', false],
     [401, 3, 'auth', false],
     [402, 4, 'credits', false],
     [404, 5, 'not_found', false],
+    [413, 2, 'usage', false],
     [429, 6, 'rate_limited', true],
     [500, 7, 'upstream', true],
     [502, 7, 'upstream', true],
@@ -495,6 +500,174 @@ describe('failures from OpenRouter (FR-016, FR-040)', () => {
     const { message } = (result.json as { error: { message: string } }).error
     expect(message).toContain('https://openrouter.ai/settings/credits')
     expect(message).toMatch(/credits/)
+  })
+
+  test("403 for the key's daily limit exits 4 and isn't retryable, keeping the reset time", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMessage = KEY_LIMIT_MESSAGE
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect(result.json).toEqual({
+      error: { code: 'credits', message: expect.any(String), retryable: false },
+    })
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('$2.52 of $2.00 used; resets 2026-11-02T00:00:00.000Z')
+    expect(fake.imageRequests()).toHaveLength(1)
+    expect(ledgerOf(result.home)).toEqual([])
+  })
+
+  test('a 403 that names a spending limit only in its metadata exits 4', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_key_limit' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect((result.json as { error: { message: string } }).error.message).toContain(
+      'openrouter_key_limit',
+    )
+  })
+
+  test("any other 403 is a refusal: exit 2, not retryable, OpenRouter's reason kept", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMessage = 'Your input was flagged'
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(2)
+    expect(result.json).toEqual({
+      error: {
+        code: 'usage',
+        message: expect.stringContaining('Your input was flagged'),
+        retryable: false,
+      },
+    })
+  })
+
+  test('a 402 for the in-flight budget is temporary: exit 6, retryable, says how long to wait', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 402
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_in_flight_budget' }
+    fake.config.images.headers = { 'retry-after': '30' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(6)
+    expect(result.json).toEqual({
+      error: {
+        code: 'rate_limited',
+        message: expect.any(String),
+        retryable: true,
+        retry_after_seconds: 30,
+      },
+    })
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('openrouter_in_flight_budget')
+    expect(message).toContain('30 seconds')
+    expect(message).not.toMatch(/raise/i)
+    expect(fake.imageRequests()).toHaveLength(1)
+    expect(ledgerOf(result.home)).toEqual([])
+  })
+
+  test("an in-flight refusal without a Retry-After isn't a wait: exit 4, not retryable", async () => {
+    // OpenRouter's docs: "A 402 without the header is not a wait-and-retry case."
+    const { fake, gen } = setup()
+    fake.config.images.status = 402
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_in_flight_budget' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect(result.json).toEqual({
+      error: { code: 'credits', message: expect.any(String), retryable: false },
+    })
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('openrouter_in_flight_budget')
+    expect(message).toContain('https://openrouter.ai/settings/credits')
+  })
+
+  test("a 402 for the key's own limit keeps OpenRouter's message with its reset time", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 402
+    fake.config.images.errorMetadata = { limit_source: 'openrouter_key_limit' }
+    fake.config.images.errorMessage = KEY_LIMIT_MESSAGE
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('resets 2026-11-02T00:00:00.000Z')
+    expect(message).toMatch(/raise the key's limit/)
+  })
+
+  test('a spent org budget says to ask the org admin, not to raise the key limit', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMetadata = {
+      limit_source: 'openrouter_guardrail_budget',
+      resets_at: '2026-10-12T00:00:00.000Z',
+    }
+    fake.config.images.errorMessage =
+      'Org member budget limit exceeded (weekly limit). Contact your org admin. ' +
+      '$52.00 of $50.00 used; resets 2026-10-12T00:00:00.000Z.'
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    expect((result.json as { error: { retryable: boolean } }).error.retryable).toBe(false)
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('openrouter_guardrail_budget')
+    expect(message).toMatch(/admin/)
+    expect(message).toContain('2026-10-12T00:00:00.000Z')
+    expect(message).not.toMatch(/raise the key's limit/)
+  })
+
+  test("a spent lifetime workspace budget doesn't say to wait for a reset", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 403
+    fake.config.images.errorMetadata = {
+      limit_source: 'openrouter_workspace_budget',
+      resets_at: null,
+    }
+    fake.config.images.errorMessage = 'Workspace budget limit exceeded. $10.00 of $10.00 used.'
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(4)
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('openrouter_workspace_budget')
+    expect(message).not.toMatch(/reset|wait/i)
+    expect(message).not.toMatch(/raise the key's limit/)
+  })
+
+  test("a Retry-After that isn't a number of seconds adds no retry_after_seconds", async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 429
+    fake.config.images.headers = { 'retry-after': 'Wed, 21 Oct 2026 07:28:00 GMT' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(6)
+    expect(result.json).toEqual({
+      error: { code: 'rate_limited', message: expect.any(String), retryable: true },
+    })
+  })
+
+  test('a 413 says the request is too large and points at the references', async () => {
+    const { fake, gen } = setup()
+    fake.config.images.status = 413
+    fake.config.images.errorMessage = 'Request payload too large'
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(2)
+    const { message } = (result.json as { error: { message: string } }).error
+    expect(message).toContain('Request payload too large')
+    expect(message).toContain('--ref')
+  })
+
+  test.each([
+    [429, 6, 'rate_limited'],
+    [503, 7, 'upstream'],
+  ])('a %i with a Retry-After says how long to wait', async (status, exit, code) => {
+    const { fake, gen } = setup()
+    fake.config.images.status = status
+    fake.config.images.headers = { 'retry-after': '45' }
+    const result = await gen(['p', '-m', SEEDREAM, '--json'])
+    expect(result.exitCode).toBe(exit)
+    expect(result.json).toEqual({
+      error: {
+        code,
+        message: expect.stringContaining('45 seconds'),
+        retryable: true,
+        retry_after_seconds: 45,
+      },
+    })
   })
 
   test('Story 2.4: a server error is retryable', async () => {
