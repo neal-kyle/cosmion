@@ -340,6 +340,20 @@ describe('the format (FR-009, FR-010)', () => {
     expect((result.json as Entry).settings.output_format).toBe(format)
   })
 
+  test('--out x.gif asks for gif when the model offers it', async () => {
+    const { fake, gen } = setup()
+    const model = fake.config.models.find((m) => m.id === FLUX)
+    if (!model) throw new Error('fixture missing')
+    model.supported_parameters = {
+      ...(model.supported_parameters as object),
+      output_format: { type: 'enum', values: ['png', 'gif'] },
+    }
+    const result = await gen(['p', '-m', FLUX, '--out', 'x.gif', '--json'])
+    expect(result.exitCode).toBe(0)
+    expect(fake.imageRequests()[0]?.json.output_format).toBe('gif')
+    expect((result.json as Entry).settings.output_format).toBe('gif')
+  })
+
   test.each([
     ['a format the model does not offer', FLUX, ['--out', 'x.webp']],
     ['a model without output_format', SEEDREAM, ['--out', 'x.png']],
@@ -361,6 +375,7 @@ describe('the format (FR-009, FR-010)', () => {
     ['image/png', 'tiny.png', '.png', 'png'],
     ['image/jpeg', 'tiny.jpg', '.jpg', 'jpeg'],
     ['image/webp', 'tiny.webp', '.webp', 'webp'],
+    ['image/gif', 'tiny.gif', '.gif', 'gif'],
   ])('a default name takes its extension from media_type %s', async (type, file, ext, format) => {
     const { fake, gen } = setup()
     fake.config.images.data = [{ b64_json: base64Of(file), media_type: type }]
