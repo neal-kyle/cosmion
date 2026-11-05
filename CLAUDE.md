@@ -37,7 +37,8 @@ Where things are:
 | `node dist/cli/main.js …` | Run the built CLI (or `npm link` once, then `cosmion …`) |
 
 Each change ends with lint, test and build passing. Releasing: bump `version` in
-`package.json`, merge to `main`, push a tag `v<version>`; CI stages it on npm once every
+`package.json` and add its entry to `CHANGELOG.md` (what a user would notice), merge to
+`main`, push a tag `v<version>`; CI stages it on npm once every
 system passes, and the maintainer approves it on npmjs.com (Staged Packages tab, with 2FA)
 to make it live. npm refuses it unless `repository.url` in `package.json` matches the
 GitHub repo and the repo is public.
