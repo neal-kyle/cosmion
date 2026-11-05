@@ -16,7 +16,7 @@ export interface OutPaths {
 }
 
 /** The extensions a default name can get, known only once the image is back (FR-010). */
-const DEFAULT_EXTENSIONS = ['.png', '.jpg', '.webp', '.svg']
+const DEFAULT_EXTENSIONS = ['.png', '.jpg', '.webp', '.svg', '.gif']
 
 /** Formats as the Images API names them, by file extension (FR-009). */
 const EXTENSION_FORMATS: Record<string, string> = {
@@ -25,6 +25,7 @@ const EXTENSION_FORMATS: Record<string, string> = {
   '.jpeg': 'jpeg',
   '.webp': 'webp',
   '.svg': 'svg',
+  '.gif': 'gif',
 }
 
 /** The format a path's extension names, e.g. `jpeg` for `hero.JPG`. */

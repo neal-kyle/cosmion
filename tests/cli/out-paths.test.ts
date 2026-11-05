@@ -114,7 +114,7 @@ describe('an existing file is refused without --force (FR-011)', () => {
     expect(error.message).toContain('logo-2.png')
   })
 
-  test.each([['png'], ['jpg'], ['webp'], ['svg']])(
+  test.each([['png'], ['jpg'], ['webp'], ['svg'], ['gif']])(
     'cosmion-<id>.%s, since the format is only known afterwards',
     async (extension) => {
       const { t, plan: p } = plan(undefined)

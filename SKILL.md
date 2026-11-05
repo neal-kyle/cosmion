@@ -59,7 +59,7 @@ the model supports, and a value it doesn't support exits 2 listing the allowed v
 | `--background <b>` | `background` | `auto`, `transparent` or `opaque` |
 | `-n, --count <n>` | `n` | how many images to ask for (an upper bound) |
 | `--seed <int>` | `seed` | for repeatable results; `gen` picks and records one when the model supports it |
-| `--format <f>` | `output_format` | `png`, `jpeg`, `webp` or `svg` |
+| `--format <f>` | `output_format` | `png`, `jpeg`, `webp`, `svg` or `gif` (GPT Image 2.6's GIFs are animated) |
 | `--compression <0-100>` | `output_compression` | for jpeg and webp |
 | `--ref <path-or-url>` | `input_references` | a PNG, JPEG or WebP file or an `https://` URL; repeatable |
 

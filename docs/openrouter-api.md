@@ -26,7 +26,7 @@ this, not the chat completions endpoint with `modalities: ["image"]`.
 | `background` | enum | `auto`, `transparent`, `opaque` |
 | `n` | integer 1–10 | upper bound on number of images |
 | `seed` | integer | deterministic sampling |
-| `output_format` | enum | `png`, `jpeg`, `webp`, `svg` |
+| `output_format` | enum | `png`, `jpeg`, `webp`, `svg`, `gif` (`gif` isn't in OpenRouter's docs, but GPT Image 2.6 lists it) |
 | `output_compression` | integer 0–100 | for webp/jpeg |
 | `input_references` | array, max 16 | reference images for image-to-image: `{ "type": "image_url", "image_url": { "url": "<https URL or base64 data URL>" } }` |
 | `size` | string | shorthand for dimensions or tier; prefer `aspect_ratio` + `resolution` |
@@ -71,6 +71,10 @@ Response headers: `x-generation-id: gen-img-…` and `x-provider-name: Seed`.
   2.5 Flash Image 1024×1024.
 - A model can return a format its `output_format` enum doesn't list: Riverflow v2.5 Fast
   lists only `jpeg` but returned WebP.
+- GIF (checked live 2026-11-05, GPT Image 2.6 Flare, `quality: low`): `output_format: gif`
+  returned an animated, looping GIF (9 frames, 512×512, $0.035) as `image/gif`. Without
+  `output_format` the model returned a still PNG (about 1448×1086), even when the prompt
+  asked for "an animated GIF": only the field gets a GIF.
 
 ## Model discovery
 
