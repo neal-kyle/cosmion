@@ -1,6 +1,6 @@
 {
   "name": "cosmion",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generate images with any OpenRouter model from your terminal or your agent, with your own key.",
   "keywords": [
     "openrouter",
